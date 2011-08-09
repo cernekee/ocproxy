@@ -1,0 +1,63 @@
+[Note]:  
+
+Special options setting of lwIP in this project (for using it with uC/OS-II on TI C6000 DSP)
+
+*******************************************************************************************
+This port was for project ucos-lwip-c6x (http://gro.clinux.org/projects/ucos-lwip-c6x/). 
+
+For the moment we were writing this note, lwIP v1.1.0 was used in this project. 
+
+This note was written in Jan.22 2005 by zengming99@mails.tsinghua.edu.cn.
+*******************************************************************************************
+
+Usually, options of lwIP can be set in file "lwipopts.h". 
+
+It was included by "opt.h", amd all options would be set as default value in "opt.h" 
+if they were not defined in "lwipopts.h".
+
+Each project should have its own "lwiports.h", and keep "opt.h" as it was.
+
+In this project, for making lwIP work with uC/OS-II on a 32bits TI DSP, 
+following options should be set:
+------------------------------------------------------------------------------------
+
+	1.  Define symbol "LWIP_PROVIDE_ERRNO" in compiler of CodeComposerStudio
+
+
+	2.  #define MEM_ALIGNMENT 	4    (in "lwipopts.h" )
+	    #define ETH_PAD_SIZE	2    (in "lwipopts.h" )
+	
+	    For the struct align problem on 32bits DSP.
+
+
+	3.  #define ARP_QUEUEING	0 (in "lwipopts.h")
+	
+	    ARP_QUEUEING has a bug in lwIP v1.0.0 with TCP
+
+
+	4.  #define LWIP_TASK_MAX	5 (in "sys_arch.h" )
+            #define LWIP_START_PRIO	10 (in "sys_arch.h" )
+
+	   #define TCPIP_THREAD_PRIO	5 (in "lwipopts.h" )
+
+           The default TCPIP_THREAD used priority 5.
+
+	   And, 5 lwIP threads were allowed, user defined lwIP thread should have its priority between 10 ~ 14.
+
+
+	5. #define  SYS_LIGHTWEIGHT_PROT	1		(in "lwipopts.h" )
+	
+	   #define SYS_ARCH_DECL_PROTECT(lev) 				(in "sys_arch.h" )
+	   #define SYS_ARCH_PROTECT(lev) 	OS_ENTER_CRITICAL()	(in "sys_arch.h" )
+	   #define SYS_ARCH_UNPROTECT(lev) 	OS_EXIT_CRITICAL()	(in "sys_arch.h" )
+
+		These were very important when ethernet driver used intrrupt to check packet
+	   and pBuf function was called in ISR.  Or else, uC/OS-II would run away.
+
+		A much better and clean method is to set up a thread for the driver, in ISR 
+	   just check packet and post MailBox to the thread.
+
+
+Zeng, Ming
+
+2005-01-18		

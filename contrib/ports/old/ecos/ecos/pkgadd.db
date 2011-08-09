@@ -1,0 +1,7 @@
+package CYGPKG_NET_LWIP {
+	alias		{"lwIP" lwip}
+	directory	net/lwip_tcpip
+	script		cdl/lwip_net.cdl
+	description	"lightweight TCP/IP stack: lwIP"
+}
+

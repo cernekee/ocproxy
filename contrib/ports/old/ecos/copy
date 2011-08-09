@@ -1,0 +1,16 @@
+#!/bin/sh
+
+#make an ecos epk from CVS lwIP
+CURRENT=$EPK/net/lwip_tcpip/current
+mkdir -p `dirname $CURRENT/$2`
+
+#prepend eCos license text to all files but the ones
+#in the ppp directory: those have the advertising clause
+#type of BSD license which is not compatible with GPL
+#or that's what I'be been told and IANAL
+if [ "`dirname $1`" !=  "src/netif/ppp" ];  then
+	#cat header $LWIP_CVS/$1 > $CURRENT/$2
+	cp -f $LWIP_CVS/$1 $CURRENT/$2
+else	
+	cp -f $LWIP_CVS/$1 $CURRENT/$2
+fi	
