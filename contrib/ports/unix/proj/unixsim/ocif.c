@@ -71,7 +71,7 @@ struct ocif {
 };
 
 static void
-ocif_input_handler(void *arg)
+ocif_input(void *arg)
 {
 	struct netif *netif;
 	struct ocif *ocif;
@@ -202,7 +202,7 @@ ocif_init_client(struct netif *netif)
 		abort();
 	}
 
-	sys_thread_new("ocif_input", ocif_input_handler, netif, DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
+	sys_thread_new("ocif_input", ocif_input, netif, DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
 
 	return ERR_OK;
 }
