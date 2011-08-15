@@ -32,6 +32,9 @@
 #ifndef __LWIPOPTS_H__
 #define __LWIPOPTS_H__
 
+#define MEM_LIBC_MALLOC 1
+#define MEM_SIZE_F U32_F
+
 /* <sys/time.h> is included in cc.h! */
 #define LWIP_TIMEVAL_PRIVATE 0
 
@@ -39,7 +42,7 @@
 #define LWIP_COMPAT_SOCKETS 1
 #define TAPIF_DEBUG LWIP_DBG_ON
 #define TUNIF_DEBUG LWIP_DBG_OFF
-#define UNIXIF_DEBUG LWIP_DBG_OFF
+#define UNIXIF_DEBUG LWIP_DBG_ON
 #define DELIF_DEBUG LWIP_DBG_OFF
 #define SIO_FIFO_DEBUG LWIP_DBG_OFF
 #define TCPDUMP_DEBUG LWIP_DBG_ON
@@ -76,6 +79,8 @@ extern unsigned char debug_flags;
 #define LWIP_SOCKET                (NO_SYS==0)
 #define LWIP_NETCONN               (NO_SYS==0)
 
+#define	LWIP_SO_RCVTIMEO	1
+
 
 /* ---------- Memory options ---------- */
 /* MEM_ALIGNMENT: should be set to the alignment of the CPU for which
@@ -87,53 +92,53 @@ extern unsigned char debug_flags;
 
 /* MEM_SIZE: the size of the heap memory. If the application will send
 a lot of data that needs to be copied, this should be set high. */
-#define MEM_SIZE               10240 
+#define MEM_SIZE               1024000
 
 /* MEMP_NUM_PBUF: the number of memp struct pbufs. If the application
    sends a lot of data out of ROM (or other static memory), this
    should be set high. */
-#define MEMP_NUM_PBUF           16
+#define MEMP_NUM_PBUF           1600
 /* MEMP_NUM_RAW_PCB: the number of UDP protocol control blocks. One
    per active RAW "connection". */
-#define MEMP_NUM_RAW_PCB        3
+#define MEMP_NUM_RAW_PCB        30
 /* MEMP_NUM_UDP_PCB: the number of UDP protocol control blocks. One
    per active UDP "connection". */
-#define MEMP_NUM_UDP_PCB        4
+#define MEMP_NUM_UDP_PCB        40
 /* MEMP_NUM_TCP_PCB: the number of simulatenously active TCP
    connections. */
-#define MEMP_NUM_TCP_PCB        5
+#define MEMP_NUM_TCP_PCB        1000
 /* MEMP_NUM_TCP_PCB_LISTEN: the number of listening TCP
    connections. */
-#define MEMP_NUM_TCP_PCB_LISTEN 8
+#define MEMP_NUM_TCP_PCB_LISTEN 80
 /* MEMP_NUM_TCP_SEG: the number of simultaneously queued TCP
    segments. */
-#define MEMP_NUM_TCP_SEG        16
+#define MEMP_NUM_TCP_SEG        1600
 /* MEMP_NUM_SYS_TIMEOUT: the number of simulateously active
    timeouts. */
-#define MEMP_NUM_SYS_TIMEOUT    3
+#define MEMP_NUM_SYS_TIMEOUT    300
 
 /* The following four are used only with the sequential API and can be
    set to 0 if the application only will use the raw API. */
 /* MEMP_NUM_NETBUF: the number of struct netbufs. */
-#define MEMP_NUM_NETBUF         2
+#define MEMP_NUM_NETBUF         200
 /* MEMP_NUM_NETCONN: the number of struct netconns. */
-#define MEMP_NUM_NETCONN        10
+#define MEMP_NUM_NETCONN        1000
 /* MEMP_NUM_TCPIP_MSG_*: the number of struct tcpip_msg, which is used
    for sequential API communication and incoming packets. Used in
    src/api/tcpip.c. */
-#define MEMP_NUM_TCPIP_MSG_API   16
-#define MEMP_NUM_TCPIP_MSG_INPKT 16
+#define MEMP_NUM_TCPIP_MSG_API   1600
+#define MEMP_NUM_TCPIP_MSG_INPKT 1600
 
 /* ---------- Pbuf options ---------- */
 /* PBUF_POOL_SIZE: the number of buffers in the pbuf pool. */
-#define PBUF_POOL_SIZE          100
+#define PBUF_POOL_SIZE          10000
 
 /* PBUF_POOL_BUFSIZE: the size of each pbuf in the pbuf pool. */
-#define PBUF_POOL_BUFSIZE       128
+#define PBUF_POOL_BUFSIZE       2048
 
 /* PBUF_LINK_HLEN: the number of bytes that should be allocated for a
    link level header. */
-#define PBUF_LINK_HLEN          16 
+#define PBUF_LINK_HLEN          16
 
 /** SYS_LIGHTWEIGHT_PROT
  * define SYS_LIGHTWEIGHT_PROT in lwipopts.h if you want inter-task protection
@@ -234,6 +239,9 @@ a lot of data that needs to be copied, this should be set high. */
  * */
 
 #define LWIP_STATS	1
+
+/* Include DNS support. */
+#define LWIP_DNS	1
 
 /* ---------- PPP options ---------- */
 

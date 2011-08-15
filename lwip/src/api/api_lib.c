@@ -458,7 +458,7 @@ netconn_recv(struct netconn *conn, struct netbuf **new_buf)
   LWIP_ERROR("netconn_recv: invalid pointer", (new_buf != NULL), return ERR_ARG;);
   *new_buf = NULL;
   LWIP_ERROR("netconn_recv: invalid conn",    (conn != NULL),    return ERR_ARG;);
-  LWIP_ERROR("netconn_accept: invalid recvmbox", sys_mbox_valid(&conn->recvmbox), return ERR_CONN;);
+  LWIP_ERROR("netconn_recv: invalid recvmbox", sys_mbox_valid(&conn->recvmbox), return ERR_CONN;);
 
 #if LWIP_TCP
   if (conn->type == NETCONN_TCP) {

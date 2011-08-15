@@ -229,7 +229,7 @@ static u8_t*                  dns_payload;
  * (DNS_SERVER_ADDRESS).
  */
 void
-dns_init()
+dns_init(void)
 {
   ip_addr_t dnsserver;
 

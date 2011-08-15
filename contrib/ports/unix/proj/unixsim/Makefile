@@ -35,7 +35,8 @@ CC=gcc
 #To compile for linux: make ARCH=linux
 #To compile for cygwin: make ARCH=cygwin
 ARCH=unix
-CFLAGS=-g -Wall -D$(ARCH) -DIPv4 -DLWIP_DEBUG -pedantic -Werror \
+CFLAGS=-g -D$(ARCH) -DIPv4 -DLWIP_DEBUG \
+	-pedantic -Werror \
 	-Wparentheses -Wsequence-point -Wswitch-default \
 	-Wextra -Wundef -Wshadow -Wpointer-arith -Wbad-function-cast \
 	-Wc++-compat -Wwrite-strings -Wold-style-definition \
@@ -65,7 +66,8 @@ COREFILES=$(LWIPDIR)/core/mem.c $(LWIPDIR)/core/memp.c $(LWIPDIR)/core/netif.c \
 	$(LWIPDIR)/core/pbuf.c $(LWIPDIR)/core/raw.c $(LWIPDIR)/core/stats.c \
 	$(LWIPDIR)/core/sys.c $(LWIPDIR)/core/tcp.c $(LWIPDIR)/core/tcp_in.c \
 	$(LWIPDIR)/core/tcp_out.c $(LWIPDIR)/core/udp.c $(LWIPDIR)/core/dhcp.c \
-	$(LWIPDIR)/core/init.c $(LWIPDIR)/core/timers.c $(LWIPDIR)/core/def.c
+	$(LWIPDIR)/core/init.c $(LWIPDIR)/core/timers.c $(LWIPDIR)/core/def.c \
+	$(LWIPDIR)/core/dns.c
 CORE4FILES=$(wildcard $(LWIPDIR)/core/ipv4/*.c) $(LWIPDIR)/core/ipv4/inet.c \
 	$(LWIPDIR)/core/ipv4/inet_chksum.c
 
@@ -114,7 +116,7 @@ all ipv4 compile: simhost
 .PHONY: all
 
 clean:
-	rm -f *.o $(LWIPLIB) $(APPLIB) simhost simnode simrouter *.s .depend* *.core core
+	rm -f *.o $(LWIPLIB) $(APPLIB) simhost simnode simrouter ocfw *.s .depend* *.core core
 
 depend dep: .depend
 
@@ -126,7 +128,7 @@ $(APPLIB): $(APPOBJS)
 $(LWIPLIB): $(LWIPOBJS)
 	$(AR) $(ARFLAGS) $(LWIPLIB) $?
 
-.depend: simhost.c simnode.c simrouter.c $(LWIPFILES) $(APPFILES)
+.depend: simhost.c simnode.c simrouter.c ocfw.c tcpfw.c ocif.c $(LWIPFILES) $(APPFILES)
 	$(CCDEP) $(CFLAGS) -MM $^ > .depend || rm -f .depend
 
 simhost: .depend $(LWIPLIB) $(APPLIB) simhost.o $(APPFILES)
@@ -137,4 +139,7 @@ simrouter: .depend $(LWIPLIB) $(APPLIB) simrouter.o
 
 simnode: .depend $(LWIPLIB) $(APPLIB) simnode.o 
 	$(CC) $(CFLAGS) $(LDFLAGS) -o simnode simnode.o $(APPLIB) $(LWIPLIB)
+
+ocfw: .depend $(LWIPLIB) $(APPLIB) ocfw.o tcpfw.o ocif.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o ocfw ocfw.o tcpfw.o ocif.o $(APPLIB) $(LWIPLIB)
 

@@ -231,6 +231,11 @@ extern int errno;
 
 #endif /* LWIP_PROVIDE_ERRNO */
 
+/* Linux doesn't have this. */
+#ifndef ENSRNOTFOUND
+#define ENSRNOTFOUND 163
+#endif /* ENSRNOTFOUND */
+
 #ifdef __cplusplus
 }
 #endif
