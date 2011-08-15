@@ -31,9 +31,14 @@
  */
 
 #include "lwip/debug.h"
+#include "lwip/opt.h"
 
 #include <unistd.h>
-
+#include <getopt.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/signal.h>
 
 #include "lwip/mem.h"
 #include "lwip/memp.h"
@@ -42,11 +47,9 @@
 
 #include "lwip/stats.h"
 
-
 #include "lwip/tcpip.h"
+#include "lwip/dns.h"
 
-
-#include "netif/unixif.h"
 #include "netif/dropif.h"
 
 #include "netif/tcpdump.h"
@@ -55,98 +58,113 @@
 
 #include "arch/perf.h"
 
-#include "httpd.h"
 #include "udpecho.h"
 #include "tcpecho.h"
-#include "shell.h"
+
+#include "ocif.h"
+#include "tcpfw.h"
 
 /* nonstatic debug cmd option, exported in lwipopts.h */
-unsigned char debug_flags;
+/*unsigned char debug_flags = (LWIP_DBG_ON | LWIP_DBG_TRACE | LWIP_DBG_STATE | LWIP_DBG_FRESH | LWIP_DBG_HALT);*/
+unsigned char debug_flags = 0;
 
-/*-----------------------------------------------------------------------------------*/
+ip_addr_t ipaddr, netmask, gw, dns;
+
 static void
 tcp_timeout(void *data)
 {
-  LWIP_UNUSED_ARG(data);
+	LWIP_UNUSED_ARG(data);
 #if TCP_DEBUG
-  tcp_debug_print_pcbs();
+	tcp_debug_print_pcbs();
 #endif /* TCP_DEBUG */
-  sys_timeout(5000, tcp_timeout, NULL);
+	sys_timeout(5000, tcp_timeout, NULL);
 }
-/*-----------------------------------------------------------------------------------*/
-struct netif netif_unix;
-/*-----------------------------------------------------------------------------------*/
+
+struct netif netif_oc;
+
 static void
 tcpip_init_done(void *arg)
 {
-  ip_addr_t ipaddr, netmask, gw;
-  sys_sem_t *sem;
-  sem = (sys_sem_t *)arg;
+	sys_sem_t *sem = (sys_sem_t *)arg;
 
-  IP4_ADDR(&gw, 192,168,1,1);
-  IP4_ADDR(&ipaddr, 192,168,1,2);
-  IP4_ADDR(&netmask, 255,255,255,0);
+	netif_init();
 
-  netif_set_default(netif_add(&netif_unix, &ipaddr, &netmask, &gw, NULL, unixif_init_client,
-			      tcpip_input));
-  /*  netif_set_default(netif_add(&ipaddr, &netmask, &gw, NULL, sioslipif_init1,
-			      tcpip_input)); */
+	sprintf(netif_oc.name, "un0");
 
-  tcpecho_init();
-  shell_init();
-  httpd_init();
-  udpecho_init();
+	netif_add(&netif_oc, &ipaddr, &netmask, &gw, NULL, ocif_init_client,
+		  tcpip_input);
 
-  printf("Applications started.\n");
+	netif_set_default(&netif_oc);
+	netif_set_up(&netif_oc);
 
-  sys_timeout(5000, tcp_timeout, NULL);
+	dns_init();
+	dns_setserver(1, &dns);
+	tcpecho_init();
+	udpecho_init();
+	tcpfw_init(26667, "irc-sfbay.us.oracle.com", 6667);
+	tcpfw_init(10022, "girltalk2.us.oracle.com", 22);
+	tcpsocks_init(11080);
 
-  sys_sem_signal(sem);
+	printf("Applications started.\n");
+
+	sys_timeout(5000, tcp_timeout, NULL);
+
+	sys_sem_signal(sem);
 }
-/*-----------------------------------------------------------------------------------*/
 
 static void
 main_thread(void *arg)
 {
-  sys_sem_t sem;
-  LWIP_UNUSED_ARG(arg);
+	sys_sem_t sem;
+	LWIP_UNUSED_ARG(arg);
 
-  if(sys_sem_new(&sem, 0) != ERR_OK) {
-    LWIP_ASSERT("Failed to create semaphore", 0);
-  }
-  tcpip_init(tcpip_init_done, &sem);
-  sys_sem_wait(&sem);
-  printf("TCP/IP initialized.\n");
+	if(sys_sem_new(&sem, 0) != ERR_OK) {
+		LWIP_ASSERT("Failed to create semaphore", 0);
+	}
+	tcpip_init(tcpip_init_done, &sem);
+	sys_sem_wait(&sem);
+	printf("TCP/IP initialized.\n");
 
-#ifdef MEM_PERF
-  mem_perf_init("/tmp/memstats.client");
-#endif /* MEM_PERF */
-
-  /* Block forever. */
-  sys_sem_wait(&sem);
+	/* Block forever. */
+	sys_sem_wait(&sem);
 }
-/*-----------------------------------------------------------------------------------*/
+
 int
-main(void)
+main(int argc, char *argv[])
 {
-#ifdef PERF
-  perf_init("/tmp/client.perf");
-#endif /* PERF */
+	int opt;
 
-  tcpdump_init();
+	while ((opt = getopt(argc, argv, "i:n:g:d:")) != -1) {
+		switch (opt) {
+		case 'i':
+			ipaddr.addr = inet_addr(optarg);
+			break;
+		case 'n':
+			netmask.addr = inet_addr(optarg);
+			break;
+		case 'g':
+			gw.addr = inet_addr(optarg);
+			break;
+		case 'd':
+			dns.addr = inet_addr(optarg);
+			break;
+		default:
+			printf("unknown option: %c\n", opt);
+			break;
+		}
+	}
 
-  printf("System initialized.\n");
+	(void) signal(SIGPIPE, SIG_IGN);
 
-  sys_thread_new("main_thread", main_thread, NULL, DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
-  pause();
-  return 0;
+	tcpdump_init();
+
+	printf("System initialized.\n");
+	setlinebuf(stdout);
+	setlinebuf(stderr);
+
+	sys_thread_new("main_thread", main_thread, NULL, DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
+	pause();
+
+	return 0;
 }
-/*-----------------------------------------------------------------------------------*/
-
-
-
-
-
-
-
 
