@@ -54,7 +54,6 @@
 #include "lwip/pbuf.h"
 #include "netif/list.h"
 #include "lwip/sys.h"
-#include "lwip/timers.h"
 
 #include "netif/tcpdump.h"
 
@@ -68,7 +67,6 @@
 
 struct ocif {
 	int fd;
-	sys_sem_t sem;
 	struct iovec iov[MAX_IOVEC];
 };
 
@@ -84,76 +82,34 @@ ocif_input_handler(void *arg)
 	netif = (struct netif *)arg;
 	ocif = (struct ocif *)netif->state;
 
-	len = read(ocif->fd, buf, 2048);
-	if (len == -1) {
-		perror("ocif_irq_handler: read");
-		abort();
-	}
-	LWIP_DEBUGF(OCIF_DEBUG, ("ocif_irq_handler: read %d bytes\n", len));
-	p = pbuf_alloc(PBUF_RAW, len, PBUF_POOL);
-
-	if (p != NULL) {
-		int rlen;
-		char *bufptr;
-		struct pbuf *q;
-
-		rlen = len;
-		bufptr = buf;
-		q = p;
-		while (rlen > 0) {
-			int copy = rlen > q->len ? q->len : rlen;
-
-			memcpy(q->payload, bufptr, copy);
-			rlen -= copy;
-			bufptr += copy;
-			q = q->next;
+	while (1) {
+		len = read(ocif->fd, buf, 2048);
+		if (len == -1) {
+			perror("ocif_irq_handler: read");
+			abort();
 		}
-		/* pbuf_realloc(p, len); */
-		LINK_STATS_INC(link.recv);
-		tcpdump(p);
-		netif->input(p, netif);
-	} else {
-		LWIP_DEBUGF(OCIF_DEBUG, ("ocif_irq_handler: could not allocate pbuf\n"));
-	}
+		LWIP_DEBUGF(OCIF_DEBUG, ("ocif_irq_handler: read %d bytes\n", len));
+		p = pbuf_alloc(PBUF_RAW, len, PBUF_POOL);
 
-}
+		if (p != NULL) {
+			char *bufptr;
+			struct pbuf *q;
 
-static void 
-ocif_thread(void *arg)
-{
-	struct netif *netif;
-	struct ocif *ocif;
+			bufptr = buf;
+			q = p;
+			while (len > 0) {
+				int copy = (len > q->len) ? q->len : len;
 
-	LWIP_DEBUGF(OCIF_DEBUG, ("ocif_thread: started.\n"));
-
-	netif = (struct netif *)arg;
-	ocif = (struct ocif *)netif->state;
-
-	while (1) {
-		sys_sem_wait(&ocif->sem);
-		ocif_input_handler(netif);
-	}
-
-}
-
-static void 
-ocif_thread2(void *arg)
-{
-	struct netif *netif;
-	struct ocif *ocif;
-	fd_set fdset;
-
-	LWIP_DEBUGF(OCIF_DEBUG, ("ocif_thread2: started.\n"));
-
-	netif = (struct netif *)arg;
-	ocif = (struct ocif *)netif->state;
-
-	while (1) {
-		FD_ZERO(&fdset);
-		FD_SET(ocif->fd, &fdset);
-
-		if (select(ocif->fd + 1, &fdset, NULL, NULL, NULL) > 0) {
-			sys_sem_signal(&ocif->sem);
+				memcpy(q->payload, bufptr, copy);
+				len -= copy;
+				bufptr += copy;
+				q = q->next;
+			}
+			LINK_STATS_INC(link.recv);
+			tcpdump(p);
+			netif->input(p, netif);
+		} else {
+			LWIP_DEBUGF(OCIF_DEBUG, ("ocif_irq_handler: could not allocate pbuf\n"));
 		}
 	}
 }
@@ -214,6 +170,7 @@ ocif_output(struct netif *netif, struct pbuf *p, ip_addr_t *ipaddr)
 			perror("ocif_output: write");
 			abort();
 		}
+
 		free(data);
 	}
 
@@ -244,11 +201,8 @@ ocif_init_client(struct netif *netif)
 		perror("ocif_init");
 		abort();
 	}
-	if(sys_sem_new(&ocif->sem, 0) != ERR_OK) {
-		LWIP_ASSERT("Failed to create semaphore", 0);
-	}
-	sys_thread_new("ocif_thread", ocif_thread, netif, DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
-	sys_thread_new("ocif_thread2", ocif_thread2, netif, DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
+
+	sys_thread_new("ocif_input", ocif_input_handler, netif, DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
 
 	return ERR_OK;
 }
