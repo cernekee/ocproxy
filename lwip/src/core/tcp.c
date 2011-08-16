@@ -507,9 +507,9 @@ tcp_listen_with_backlog(struct tcp_pcb *pcb, u8_t backlog)
   }
 #endif /* SO_REUSE */
   lpcb = (struct tcp_pcb_listen *)memp_malloc(MEMP_TCP_PCB_LISTEN);
-  if (lpcb == NULL) {
+  if (lpcb == NULL)
     return NULL;
-  }
+  memset(lpcb, 0, memp_sizes[MEMP_TCP_PCB_LISTEN]);
   lpcb->callback_arg = pcb->callback_arg;
   lpcb->local_port = pcb->local_port;
   lpcb->state = LISTEN;
@@ -1206,7 +1206,7 @@ tcp_alloc(u8_t prio)
     }
   }
   if (pcb != NULL) {
-    memset(pcb, 0, sizeof(struct tcp_pcb));
+    memset(pcb, 0, memp_sizes[MEMP_TCP_PCB]);
     pcb->prio = prio;
     pcb->snd_buf = TCP_SND_BUF;
     pcb->snd_queuelen = 0;

@@ -940,9 +940,10 @@ dns_gethostbyname(const char *hostname, ip_addr_t *addr, dns_found_callback foun
   /* not initialized or no valid server yet, or invalid addr pointer
    * or invalid hostname or invalid hostname length */
   if ((dns_pcb == NULL) || (addr == NULL) ||
-      (!hostname) || (!hostname[0]) ||
-      (strlen(hostname) >= DNS_MAX_NAME_LENGTH)) {
-    return ERR_ARG;
+      (hostname == NULL))
+	  return ERR_ARG;
+  if ((hostname[0] == '\0') || (strlen(hostname) >= DNS_MAX_NAME_LENGTH)) {
+	  return ERR_ARG;
   }
 
 #if LWIP_HAVE_LOOPIF

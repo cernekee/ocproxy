@@ -187,6 +187,8 @@ pbuf_alloc(pbuf_layer layer, u16_t length, pbuf_type type)
   struct pbuf *p, *q, *r;
   u16_t offset;
   s32_t rem_len; /* remaining length */
+  int s;
+
   LWIP_DEBUGF(PBUF_DEBUG | LWIP_DBG_TRACE, ("pbuf_alloc(length=%"U16_F")\n", length));
 
   /* determine header offset */
@@ -220,6 +222,7 @@ pbuf_alloc(pbuf_layer layer, u16_t length, pbuf_type type)
       PBUF_POOL_IS_EMPTY();
       return NULL;
     }
+    memset(p, 0, memp_sizes[MEMP_PBUF_POOL]);
     p->type = type;
     p->next = NULL;
 
@@ -255,6 +258,7 @@ pbuf_alloc(pbuf_layer layer, u16_t length, pbuf_type type)
         /* bail out unsuccesfully */
         return NULL;
       }
+      memset(q, 0, memp_sizes[MEMP_PBUF_POOL]);
       q->type = type;
       q->flags = 0;
       q->next = NULL;
@@ -283,10 +287,12 @@ pbuf_alloc(pbuf_layer layer, u16_t length, pbuf_type type)
     break;
   case PBUF_RAM:
     /* If pbuf is to be allocated in RAM, allocate memory for it. */
-    p = (struct pbuf*)mem_malloc(LWIP_MEM_ALIGN_SIZE(SIZEOF_STRUCT_PBUF + offset) + LWIP_MEM_ALIGN_SIZE(length));
-    if (p == NULL) {
+    s = LWIP_MEM_ALIGN_SIZE(SIZEOF_STRUCT_PBUF + offset) + LWIP_MEM_ALIGN_SIZE(length);
+    p = (struct pbuf *)mem_malloc(s);
+    if (p == NULL)
       return NULL;
-    }
+    memset(p, 0, s);
+
     /* Set up internal structure of the pbuf. */
     p->payload = LWIP_MEM_ALIGN((void *)((u8_t *)p + SIZEOF_STRUCT_PBUF + offset));
     p->len = p->tot_len = length;
@@ -308,6 +314,7 @@ pbuf_alloc(pbuf_layer layer, u16_t length, pbuf_type type)
                   (type == PBUF_ROM) ? "ROM" : "REF"));
       return NULL;
     }
+    memset(p, 0, memp_sizes[MEMP_PBUF]);
     /* caller must set this field properly, afterwards */
     p->payload = NULL;
     p->len = p->tot_len = length;
