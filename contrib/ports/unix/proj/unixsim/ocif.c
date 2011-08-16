@@ -52,7 +52,6 @@
 #include "lwip/def.h"
 #include "lwip/mem.h"
 #include "lwip/pbuf.h"
-#include "netif/list.h"
 #include "lwip/sys.h"
 
 #include "netif/tcpdump.h"
@@ -75,23 +74,22 @@ ocif_input(void *arg)
 {
 	struct netif *netif;
 	struct ocif *ocif;
-	char buf[2048];
-	int len;
-	struct pbuf *p;
 
 	netif = (struct netif *)arg;
 	ocif = (struct ocif *)netif->state;
 
 	while (1) {
-		len = read(ocif->fd, buf, 2048);
-		if (len == -1) {
-			perror("ocif_irq_handler: read");
+		char buf[2048];
+		int len;
+		struct pbuf *p;
+
+		if ((len = read(ocif->fd, buf, 2048)) < 0) {
+			perror("ocif_input: read");
 			abort();
 		}
-		LWIP_DEBUGF(OCIF_DEBUG, ("ocif_irq_handler: read %d bytes\n", len));
-		p = pbuf_alloc(PBUF_RAW, len, PBUF_POOL);
+		LWIP_DEBUGF(OCIF_DEBUG, ("ocif_input: read %d bytes\n", len));
 
-		if (p != NULL) {
+		if ((p = pbuf_alloc(PBUF_RAW, len, PBUF_POOL)) != NULL) {
 			char *bufptr;
 			struct pbuf *q;
 
@@ -109,7 +107,7 @@ ocif_input(void *arg)
 			tcpdump(p);
 			netif->input(p, netif);
 		} else {
-			LWIP_DEBUGF(OCIF_DEBUG, ("ocif_irq_handler: could not allocate pbuf\n"));
+			LWIP_DEBUGF(OCIF_DEBUG, ("ocif_input: could not allocate pbuf\n"));
 		}
 	}
 }
@@ -184,20 +182,17 @@ err_t
 ocif_init_client(struct netif *netif)
 {
 	struct ocif *ocif;
-	int fd = atoi(getenv("VPNFD"));
 
-	ocif = (struct ocif *)malloc(sizeof(struct ocif));
-	if (!ocif) {
-		return ERR_MEM;
-	}
+	ocif = (struct ocif *)malloc(sizeof (*ocif));
+	memset(ocif, 0, sizeof (*ocif));
 
 	netif->state = ocif;
 	netif->name[0] = 'u';
 	netif->name[1] = 'n';
 	netif->output = ocif_output;
 
-	ocif->fd = fd;
-	if (ocif->fd == -1) {
+	/* XXX bogus error check. */
+	if ((ocif->fd = atoi(getenv("VPNFD"))) < 0) {
 		perror("ocif_init");
 		abort();
 	}

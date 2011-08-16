@@ -32,8 +32,12 @@
 #ifndef __LWIPOPTS_H__
 #define __LWIPOPTS_H__
 
+/*
+ * Use the libc memory allocator.
+ */
 #define MEM_LIBC_MALLOC 1
 #define MEM_SIZE_F U32_F
+#define MEMP_MEM_MALLOC 1
 
 /* <sys/time.h> is included in cc.h! */
 #define LWIP_TIMEVAL_PRIVATE 0
@@ -46,6 +50,9 @@
 #define DELIF_DEBUG LWIP_DBG_OFF
 #define SIO_FIFO_DEBUG LWIP_DBG_OFF
 #define TCPDUMP_DEBUG LWIP_DBG_ON
+
+#define OCIF_DEBUG LWIP_DBG_ON
+#define TCPFW_DEBUG LWIP_DBG_ON
 
 #define PPP_DEBUG        LWIP_DBG_OFF
 #define MEM_DEBUG        LWIP_DBG_OFF
@@ -80,7 +87,6 @@ extern unsigned char debug_flags;
 #define LWIP_NETCONN               (NO_SYS==0)
 
 #define	LWIP_SO_RCVTIMEO	1
-
 
 /* ---------- Memory options ---------- */
 /* MEM_ALIGNMENT: should be set to the alignment of the CPU for which
@@ -159,7 +165,7 @@ a lot of data that needs to be copied, this should be set high. */
 #define TCP_MSS                 1024
 
 /* TCP sender buffer space (bytes). */
-#define TCP_SND_BUF             2048
+#define TCP_SND_BUF             65534 /* Match TCP_WND. */
 
 /* TCP sender buffer space (pbufs). This must be at least = 2 *
    TCP_SND_BUF/TCP_MSS for things to work. */
@@ -168,16 +174,18 @@ a lot of data that needs to be copied, this should be set high. */
 /* TCP writable space (bytes). This must be less than or equal
    to TCP_SND_BUF. It is the amount of space which must be
    available in the tcp snd_buf for select to return writable */
-#define TCP_SNDLOWAT		(TCP_SND_BUF/2)
+#define TCP_SNDLOWAT		(TCP_SND_BUF/8)
 
 /* TCP receive window. */
-#define TCP_WND                 8096
+#define TCP_WND                 65534 /* Avoid wrap. */
 
 /* Maximum number of retransmissions of data segments. */
 #define TCP_MAXRTX              12
 
 /* Maximum number of retransmissions of SYN segments. */
 #define TCP_SYNMAXRTX           4
+
+#define LWIP_TCPIP_CORE_LOCKING 1
 
 /* ---------- ARP options ---------- */
 #define LWIP_ARP                1

@@ -30,6 +30,10 @@
  *
  */
 
+/*
+ * Derived from simhost.c.
+ */
+
 #include "lwip/debug.h"
 #include "lwip/opt.h"
 
@@ -68,17 +72,16 @@
 /*unsigned char debug_flags = (LWIP_DBG_ON | LWIP_DBG_TRACE | LWIP_DBG_STATE | LWIP_DBG_FRESH | LWIP_DBG_HALT);*/
 unsigned char debug_flags = 0;
 
-ip_addr_t ipaddr, netmask, gw, dns;
+typedef struct fwd {
+	in_port_t lport;
+	char *rhost;
+	in_port_t rport;
+	struct fwd *next;
+} fwd_t;
 
-static void
-tcp_timeout(void *data)
-{
-	LWIP_UNUSED_ARG(data);
-#if TCP_DEBUG
-	tcp_debug_print_pcbs();
-#endif /* TCP_DEBUG */
-	sys_timeout(5000, tcp_timeout, NULL);
-}
+ip_addr_t ipaddr, netmask, gw, dns;
+in_port_t socks_port;
+fwd_t *forwards;
 
 struct netif netif_oc;
 
@@ -86,6 +89,7 @@ static void
 tcpip_init_done(void *arg)
 {
 	sys_sem_t *sem = (sys_sem_t *)arg;
+	fwd_t *fwd;
 
 	netif_init();
 
@@ -101,13 +105,12 @@ tcpip_init_done(void *arg)
 	dns_setserver(1, &dns);
 	tcpecho_init();
 	udpecho_init();
-	tcpfw_init(26667, "irc-sfbay.us.oracle.com", 6667);
-	tcpfw_init(10022, "girltalk2.us.oracle.com", 22);
-	tcpsocks_init(11080);
 
-	printf("Applications started.\n");
+	if (socks_port != 0)
+		tcpsocks_init(socks_port);
 
-	sys_timeout(5000, tcp_timeout, NULL);
+	for (fwd = forwards; fwd != NULL; fwd = fwd->next)
+		tcpfw_init(fwd->lport, fwd->rhost, fwd->rport);
 
 	sys_sem_signal(sem);
 }
@@ -123,10 +126,50 @@ main_thread(void *arg)
 	}
 	tcpip_init(tcpip_init_done, &sem);
 	sys_sem_wait(&sem);
-	printf("TCP/IP initialized.\n");
 
 	/* Block forever. */
 	sys_sem_wait(&sem);
+}
+
+static void
+fwd_add(char *s)
+{
+	char *lport_s, *rhost_s, *rport_s;
+	fwd_t *newp;
+
+	lport_s = rhost_s = rport_s = NULL;
+
+	lport_s = s;
+	while (*s != '\0') {
+		if (*s == ':') {
+			*s = '\0';
+			s++;
+			break;
+		}
+		s++;
+	}
+
+	rhost_s = s;
+	while (*s != '\0') {
+		if (*s == ':') {
+			*s = '\0';
+			s++;
+			break;
+		}
+		s++;
+	}
+
+	rport_s = s;
+
+	newp = (fwd_t *)malloc(sizeof (*newp));
+	newp->lport = atoi(lport_s);
+	newp->rhost = rhost_s;
+	newp->rport = atoi(rport_s);
+	newp->next = NULL;
+
+	if (forwards)
+		newp->next = forwards;
+	forwards = newp;
 }
 
 int
@@ -134,7 +177,7 @@ main(int argc, char *argv[])
 {
 	int opt;
 
-	while ((opt = getopt(argc, argv, "i:n:g:d:")) != -1) {
+	while ((opt = getopt(argc, argv, "i:n:g:d:D:L:")) != -1) {
 		switch (opt) {
 		case 'i':
 			ipaddr.addr = inet_addr(optarg);
@@ -148,23 +191,36 @@ main(int argc, char *argv[])
 		case 'd':
 			dns.addr = inet_addr(optarg);
 			break;
+		case 'D':
+			socks_port = atoi(optarg);
+			break;
+		case 'L':
+			fwd_add(optarg);
+			break;
 		default:
-			printf("unknown option: %c\n", opt);
+			fprintf(stderr, "unknown option: %c\n", opt);
 			break;
 		}
 	}
 
-	(void) signal(SIGPIPE, SIG_IGN);
+	if ((ipaddr.addr == 0) ||
+	    (netmask.addr == 0) ||
+	    (gw.addr == 0) ||
+	    (dns.addr == 0)) {
+		fprintf(stderr, "missing -i, -n, -g or -d\n");
+		return (1);
+	}
 
 	tcpdump_init();
 
-	printf("System initialized.\n");
+	/* Debugging help. */
+	(void) signal(SIGPIPE, SIG_IGN);
 	setlinebuf(stdout);
 	setlinebuf(stderr);
 
 	sys_thread_new("main_thread", main_thread, NULL, DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
 	pause();
 
-	return 0;
+	return (0);
 }
 
