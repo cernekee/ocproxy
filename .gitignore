@@ -1,2 +1,11 @@
 *.o
 *~
+/TAGS
+/contrib/ports/unix/proj/ocvpn/.depend
+/contrib/ports/unix/proj/ocvpn/liblwip4.a
+/contrib/ports/unix/proj/ocvpn/liblwipapps.a
+/contrib/ports/unix/proj/ocvpn/ocvpn
+/contrib/ports/unix/proj/unixsim/.depend
+/contrib/ports/unix/proj/unixsim/liblwip4.a
+/contrib/ports/unix/proj/unixsim/liblwipapps.a
+/contrib/ports/unix/proj/unixsim/ocfw
