@@ -83,7 +83,7 @@ extern unsigned char debug_flags;
 #define LWIP_DBG_TYPES_ON debug_flags
 
 #define NO_SYS                     0
-#define LWIP_SOCKET                (NO_SYS==0)
+#define LWIP_SOCKET                0
 #define LWIP_NETCONN               (NO_SYS==0)
 
 #define	LWIP_SO_RCVTIMEO	1

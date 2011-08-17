@@ -293,7 +293,7 @@ tcpsocks_converse(void *arg)
 	}
 
 	memset(rhost, 0, MAXHOSTNAMELEN);
-	bcopy(&buf[5], rhost, rhostlen);
+	memcpy(rhost, &buf[5], rhostlen);
 	rhost[rhostlen + 1] = '\0';
 	rport = (buf[5 + rhostlen] << 8) | (buf[5 + rhostlen + 1]);
 

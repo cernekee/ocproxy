@@ -314,10 +314,10 @@ err_t lwip_tcp_event(void *arg, struct tcp_pcb *pcb,
 struct tcp_pcb * tcp_new     (void);
 
 void             tcp_arg     (struct tcp_pcb *pcb, void *arg);
-void             tcp_accept  (struct tcp_pcb *pcb, tcp_accept_fn accept);
-void             tcp_recv    (struct tcp_pcb *pcb, tcp_recv_fn recv);
+void             tcp_accept  (struct tcp_pcb *pcb, tcp_accept_fn _accept);
+void             tcp_recv    (struct tcp_pcb *pcb, tcp_recv_fn _recv);
 void             tcp_sent    (struct tcp_pcb *pcb, tcp_sent_fn sent);
-void             tcp_poll    (struct tcp_pcb *pcb, tcp_poll_fn poll, u8_t interval);
+void             tcp_poll    (struct tcp_pcb *pcb, tcp_poll_fn _poll, u8_t interval);
 void             tcp_err     (struct tcp_pcb *pcb, tcp_err_fn err);
 
 #define          tcp_mss(pcb)             (((pcb)->flags & TF_TIMESTAMP) ? ((pcb)->mss - 12)  : (pcb)->mss)

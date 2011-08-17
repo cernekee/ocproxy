@@ -42,7 +42,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <sys/signal.h>
+#include <signal.h>
 
 #include "lwip/mem.h"
 #include "lwip/memp.h"

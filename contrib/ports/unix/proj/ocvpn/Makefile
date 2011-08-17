@@ -35,6 +35,8 @@ CC=gcc
 #To compile for linux: make ARCH=linux
 #To compile for cygwin: make ARCH=cygwin
 ARCH=unix
+# For Solaris remove:
+# -Wc++-compat
 CFLAGS=-g -D$(ARCH) -DIPv4 -DLWIP_DEBUG \
 	-pedantic -Werror \
 	-Wparentheses -Wsequence-point -Wswitch-default \
@@ -46,7 +48,11 @@ CFLAGS=-g -D$(ARCH) -DIPv4 -DLWIP_DEBUG \
 # -Wunreachable-code
 # -ansi
 # -std=c89
+
 LDFLAGS=-lpthread -lutil
+# For Solaris use:
+# LDFLAGS=-lpthread -lsocket -lnsl
+
 CONTRIBDIR=../../../..
 LWIPARCH=$(CONTRIBDIR)/ports/unix
 ARFLAGS=rs
@@ -83,22 +89,26 @@ APIFILES=$(LWIPDIR)/api/api_lib.c $(LWIPDIR)/api/api_msg.c $(LWIPDIR)/api/tcpip.
 # NETIFFILES: Files implementing various generic network interface functions.'
 NETIFFILES=$(LWIPDIR)/netif/etharp.c $(LWIPDIR)/netif/slipif.c
 
-# NETIFFILES: Add PPP netif
-NETIFFILES+=$(LWIPDIR)/netif/ppp/auth.c $(LWIPDIR)/netif/ppp/chap.c \
-	$(LWIPDIR)/netif/ppp/chpms.c $(LWIPDIR)/netif/ppp/fsm.c \
-	$(LWIPDIR)/netif/ppp/ipcp.c $(LWIPDIR)/netif/ppp/lcp.c \
-	$(LWIPDIR)/netif/ppp/magic.c $(LWIPDIR)/netif/ppp/md5.c \
-	$(LWIPDIR)/netif/ppp/pap.c $(LWIPDIR)/netif/ppp/ppp.c \
-	$(LWIPDIR)/netif/ppp/randm.c $(LWIPDIR)/netif/ppp/vj.c \
-	$(LWIPARCH)/netif/sio.c
+# # NETIFFILES: Add PPP netif
+# NETIFFILES+=$(LWIPDIR)/netif/ppp/auth.c $(LWIPDIR)/netif/ppp/chap.c \
+# 	$(LWIPDIR)/netif/ppp/chpms.c $(LWIPDIR)/netif/ppp/fsm.c \
+# 	$(LWIPDIR)/netif/ppp/ipcp.c $(LWIPDIR)/netif/ppp/lcp.c \
+# 	$(LWIPDIR)/netif/ppp/magic.c $(LWIPDIR)/netif/ppp/md5.c \
+# 	$(LWIPDIR)/netif/ppp/pap.c $(LWIPDIR)/netif/ppp/ppp.c \
+# 	$(LWIPDIR)/netif/ppp/randm.c $(LWIPDIR)/netif/ppp/vj.c \
+# 	$(LWIPARCH)/netif/sio.c
 
+# # ARCHFILES: Architecture specific files.
+# ARCHFILES=$(wildcard $(LWIPARCH)/*.c $(LWIPARCH)/netif/tapif.c $(LWIPARCH)/netif/tunif.c $(LWIPARCH)/netif/unixif.c $(LWIPARCH)/netif/list.c $(LWIPARCH)/netif/tcpdump.c)
 # ARCHFILES: Architecture specific files.
-ARCHFILES=$(wildcard $(LWIPARCH)/*.c $(LWIPARCH)/netif/tapif.c $(LWIPARCH)/netif/tunif.c $(LWIPARCH)/netif/unixif.c $(LWIPARCH)/netif/list.c $(LWIPARCH)/netif/tcpdump.c)
+ARCHFILES=$(wildcard $(LWIPARCH)/*.c $(LWIPARCH)/netif/list.c $(LWIPARCH)/netif/tcpdump.c)
 
+# # APPFILES: Applications.
+# APPFILES=$(CONTRIBDIR)/apps/httpserver_raw/fs.c $(CONTRIBDIR)/apps/httpserver_raw/httpd.c \
+# 	$(CONTRIBDIR)/apps/udpecho/udpecho.c $(CONTRIBDIR)/apps/tcpecho/tcpecho.c \
+# 	$(CONTRIBDIR)/apps/shell/shell.c
 # APPFILES: Applications.
-APPFILES=$(CONTRIBDIR)/apps/httpserver_raw/fs.c $(CONTRIBDIR)/apps/httpserver_raw/httpd.c \
-	$(CONTRIBDIR)/apps/udpecho/udpecho.c $(CONTRIBDIR)/apps/tcpecho/tcpecho.c \
-	$(CONTRIBDIR)/apps/shell/shell.c
+APPFILES=$(CONTRIBDIR)/apps/udpecho/udpecho.c $(CONTRIBDIR)/apps/tcpecho/tcpecho.c
 
 # LWIPFILES: All the above.
 LWIPFILES=$(COREFILES) $(CORE4FILES) $(SNMPFILES) $(APIFILES) $(NETIFFILES) $(ARCHFILES)
