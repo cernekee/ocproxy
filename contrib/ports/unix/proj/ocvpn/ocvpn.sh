@@ -31,9 +31,12 @@ dns=`echo $INTERNAL_IP4_DNS | awk '{print \$1;}'`
 #    --malloc-fill=de --free-fill=ad \
 #
 ./ocvpn \
+    -v \
     -i $INTERNAL_IP4_ADDRESS \
     -n $INTERNAL_IP4_NETMASK \
     -g $VPNGATEWAY \
     -d $dns \
     -D 11080 \
-    -L 26667:irc-sfbay.us.oracle.com:6667
+    -L 16667:irc-sfbay.us.oracle.com:6667 \
+    -L 18123:emea-proxy.uk.oracle.com:80 \
+    -L 18124:emeacache.uk.oracle.com:80
