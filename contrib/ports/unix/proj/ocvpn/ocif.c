@@ -122,8 +122,6 @@ ocif_output(struct netif *netif, struct pbuf *p, ip_addr_t *ipaddr)
 	char *data, *bp;
 	LWIP_UNUSED_ARG(ipaddr);
 
-	LWIP_DEBUGF(OCIF_DEBUG, ("ocif_output\n"));
-
 	ocif = (struct ocif *)netif->state;
 
 	pbuf_ref(p);

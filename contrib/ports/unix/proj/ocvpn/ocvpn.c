@@ -69,7 +69,6 @@
 #include "tcpfw.h"
 
 /* nonstatic debug cmd option, exported in lwipopts.h */
-/*unsigned char debug_flags = (LWIP_DBG_ON | LWIP_DBG_TRACE | LWIP_DBG_STATE | LWIP_DBG_FRESH | LWIP_DBG_HALT);*/
 unsigned char debug_flags = 0;
 
 typedef struct fwd {
@@ -177,7 +176,7 @@ main(int argc, char *argv[])
 {
 	int opt;
 
-	while ((opt = getopt(argc, argv, "i:n:g:d:D:L:")) != -1) {
+	while ((opt = getopt(argc, argv, "i:n:g:d:D:L:v")) != -1) {
 		switch (opt) {
 		case 'i':
 			ipaddr.addr = inet_addr(optarg);
@@ -196,6 +195,9 @@ main(int argc, char *argv[])
 			break;
 		case 'L':
 			fwd_add(optarg);
+			break;
+		case 'v':
+			debug_flags = LWIP_DBG_ON | LWIP_DBG_TRACE | LWIP_DBG_STATE | LWIP_DBG_FRESH | LWIP_DBG_HALT;
 			break;
 		default:
 			fprintf(stderr, "unknown option: %c\n", opt);

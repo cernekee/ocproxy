@@ -4,6 +4,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
+#include <arpa/inet.h>
 #include <pthread.h>
 
 #include "lwip/opt.h"
@@ -111,6 +112,8 @@ tcpfw_listen(void *arg)
 	struct sockaddr_in sin;
 	socklen_t alen = sizeof (sin);
 
+	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_listen: listening on port %d.\n", tcpfw->lport));
+
 	while ((fd = accept(tcpfw->listen, (struct sockaddr *)&sin, &alen)) >= 0) {
 		tcpfwc_t *c;
 		ip_addr_t rhost_ip;
@@ -139,10 +142,10 @@ tcpfw_close(tcpfwc_t *c, int who)
 	pthread_mutex_lock(&p->mutex);
 
 	if (c->alive) {
-		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_close: %s %s part 1\n", c->p->name, whom));
+		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_close: %s %s part 1.\n", c->p->name, whom));
 		c->alive = 0;
 	} else {
-		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_close: %s %s part 2\n", c->p->name, whom));
+		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_close: %s %s part 2.\n", c->p->name, whom));
 		netconn_close(c->remote);
 		close(c->local);
 
@@ -211,17 +214,20 @@ tcpfw_acceptor(tcpfwc_t *c)
 	ip_addr_t rhost_ip;
 
 	if ((err = netconn_gethostbyname(c->p->rhost, &rhost_ip)) != ERR_OK) {
-		fprintf(stderr, "tcpfw_acceptor: netconn_gethostbyname error %d", err);
+		fprintf(stderr, "tcpfw_acceptor: netconn_gethostbyname error %d.", err);
+		netconn_close(c->remote);
 		return (-1);
 	}
 
-	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_acceptor: %s is 0x%x\n", c->p->rhost, rhost_ip));
+	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_acceptor: %s is 0x%x.\n", c->p->rhost, ntohl(rhost_ip.addr)));
 
 	if (netconn_connect(c->remote, &rhost_ip, c->p->rport) != ERR_OK) {
 		perror("netconn_connect");
 		netconn_close(c->remote);
 		return (-1);
 	}
+
+	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_acceptor: connected.\n"));
 
 	sys_thread_new(c->l2r, tcpfw_l2r, c, DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
 	sys_thread_new(c->r2l, tcpfw_r2l, c, DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
@@ -254,7 +260,7 @@ tcpsocks_converse(void *arg)
 
 	/* Check SOCKS version. */
 	if (buf[0] != 5) {
-		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: Unknown SOCKS version: %d\n", buf[0]));
+		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: Unknown SOCKS version: %d.\n", buf[0]));
 		goto kill;
 	}
 
@@ -268,7 +274,7 @@ tcpsocks_converse(void *arg)
 		goto kill;
 
 	if (n < 4) {
-		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: Short read looking for command\n"));
+		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: Short read looking for command.\n"));
 		goto kill;
 	}
 
@@ -276,13 +282,13 @@ tcpsocks_converse(void *arg)
 	    (buf[1] != 1) || /* CONNECT command */
 	    (buf[2] != 0) || /* FLAG 0 */
 	    (buf[3] != 3)) { /* Server resolved */
-		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: Illegal connect command\n"));
+		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: Illegal connect command.\n"));
 		goto kill;
 	}
 
 	rhostlen = buf[4]; /* Length of hostname. */
 	if (n < (4 + rhostlen + 2)) {
-		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: Short read looking for hostname/port\n"));
+		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: Short read looking for hostname/port.\n"));
 		goto kill;
 	}
 
@@ -291,21 +297,21 @@ tcpsocks_converse(void *arg)
 	rhost[rhostlen + 1] = '\0';
 	rport = (buf[5 + rhostlen] << 8) | (buf[5 + rhostlen + 1]);
 
-	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: Connect to %s:%d\n", rhost, rport));
+	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: Connect to %s:%d.\n", rhost, rport));
 
 	if ((err = netconn_gethostbyname(rhost, &rhost_ip)) != ERR_OK) {
-		fprintf(stderr, "tcpsocks_converse: netconn_gethostbyname error %d", err);
+		fprintf(stderr, "tcpsocks_converse: netconn_gethostbyname error %d.\n", err);
 		goto kill;
 	}
 
-	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: %s is 0x%x\n", rhost, rhost_ip));
+	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: %s is 0x%x\n", rhost, ntohl(rhost_ip.addr)));
 
 	if (netconn_connect(c->remote, &rhost_ip, rport) != ERR_OK) {
 		perror("netconn_connect");
 		goto kill;
 	}
 
-	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: connected\n"));
+	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: connected.\n"));
 
 	/* Good to go. */
 	buf[0] = 5; /* SOCKS version */
