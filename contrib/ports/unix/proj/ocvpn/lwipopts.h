@@ -44,17 +44,13 @@
 
 #define LWIP_DBG_MIN_LEVEL 0
 #define LWIP_COMPAT_SOCKETS 0
-#define TAPIF_DEBUG LWIP_DBG_OFF
-#define TUNIF_DEBUG LWIP_DBG_OFF
-#define UNIXIF_DEBUG LWIP_DBG_OFF
-#define DELIF_DEBUG LWIP_DBG_OFF
-#define SIO_FIFO_DEBUG LWIP_DBG_OFF
-#define TCPDUMP_DEBUG LWIP_DBG_OFF
+
+#define DELIF_DEBUG	LWIP_DBG_OFF
+#define TCPDUMP_DEBUG	LWIP_DBG_OFF
 
 #define OCIF_DEBUG	LWIP_DBG_OFF
 #define TCPFW_DEBUG	LWIP_DBG_ON
 
-#define PPP_DEBUG        LWIP_DBG_OFF
 #define MEM_DEBUG        LWIP_DBG_OFF
 #define MEMP_DEBUG       LWIP_DBG_OFF
 #define PBUF_DEBUG       LWIP_DBG_OFF
@@ -62,7 +58,6 @@
 #define API_MSG_DEBUG    LWIP_DBG_OFF
 #define TCPIP_DEBUG      LWIP_DBG_OFF
 #define NETIF_DEBUG      LWIP_DBG_OFF
-#define SOCKETS_DEBUG    LWIP_DBG_OFF
 #define DEMO_DEBUG       LWIP_DBG_OFF
 #define IP_DEBUG         LWIP_DBG_OFF
 #define IP_REASS_DEBUG   LWIP_DBG_OFF
@@ -84,7 +79,7 @@ extern unsigned char debug_flags;
 
 #define NO_SYS                     0
 #define LWIP_SOCKET                0
-#define LWIP_NETCONN               (NO_SYS==0)
+#define LWIP_NETCONN               1
 
 #define	LWIP_SO_RCVTIMEO	1
 
@@ -97,7 +92,7 @@ extern unsigned char debug_flags;
 #define MEM_ALIGNMENT           4
 
 /* MEM_SIZE: the size of the heap memory. If the application will send
-a lot of data that needs to be copied, this should be set high. */
+   a lot of data that needs to be copied, this should be set high. */
 #define MEM_SIZE               1024000
 
 /* MEMP_NUM_PBUF: the number of memp struct pbufs. If the application
@@ -188,16 +183,14 @@ a lot of data that needs to be copied, this should be set high. */
 #define LWIP_TCPIP_CORE_LOCKING 1
 
 /* ---------- ARP options ---------- */
-#define LWIP_ARP                1
-#define ARP_TABLE_SIZE          10
-#define ARP_QUEUEING            1
+#define LWIP_ARP                0
+#undef ARP_QUEUEING
 
 /* ---------- IP options ---------- */
 /* Define IP_FORWARD to 1 if you wish to have the ability to forward
    IP packets across network interfaces. If you are going to run lwIP
    on a device with only one network interface, define this to 0. */
-#define IP_FORWARD              1
-
+#define IP_FORWARD              0
 
 /* IP reassembly and segmentation.These are orthogonal even
  * if they both deal with IP fragments */
@@ -214,23 +207,13 @@ a lot of data that needs to be copied, this should be set high. */
    interfaces. */
 #define LWIP_DHCP               0
 
-/* 1 if you want to do an ARP check on the offered address
-   (recommended if using DHCP). */
-#define DHCP_DOES_ARP_CHECK     (LWIP_DHCP)
-
 /* ---------- AUTOIP options ------- */
 #define LWIP_AUTOIP             0
 
 /* ---------- SNMP options ---------- */
 /** @todo SNMP is experimental for now
     @note UDP must be available for SNMP transport */
-#ifndef LWIP_SNMP
 #define LWIP_SNMP               0
-#endif
-
-#ifndef SNMP_PRIVATE_MIB
-#define SNMP_PRIVATE_MIB        0
-#endif
 
 /* ---------- UDP options ---------- */
 #define LWIP_UDP                1
@@ -245,86 +228,12 @@ a lot of data that needs to be copied, this should be set high. */
  * (e.g #define TCP_STATS 0). All of them are turned off if LWIP_STATS
  * is 0
  * */
-
 #define LWIP_STATS	1
 
 /* Include DNS support. */
 #define LWIP_DNS	1
 
 /* ---------- PPP options ---------- */
-
 #define PPP_SUPPORT      0      /* Set > 0 for PPP */
-
-#if PPP_SUPPORT > 0
-
-#define NUM_PPP 1           /* Max PPP sessions. */
-
-
-/* Select modules to enable.  Ideally these would be set in the makefile but
- * we're limited by the command line length so you need to modify the settings
- * in this file.
- */
-#define PAP_SUPPORT      1      /* Set > 0 for PAP. */
-#define CHAP_SUPPORT     1      /* Set > 0 for CHAP. */
-#define MSCHAP_SUPPORT   0      /* Set > 0 for MSCHAP (NOT FUNCTIONAL!) */
-#define CBCP_SUPPORT     0      /* Set > 0 for CBCP (NOT FUNCTIONAL!) */
-#define CCP_SUPPORT      0      /* Set > 0 for CCP (NOT FUNCTIONAL!) */
-#define VJ_SUPPORT       1      /* Set > 0 for VJ header compression. */
-#define MD5_SUPPORT      1      /* Set > 0 for MD5 (see also CHAP) */
-
-
-/*
- * Timeouts.
- */
-#define FSM_DEFTIMEOUT		6	/* Timeout time in seconds */
-#define FSM_DEFMAXTERMREQS	2	/* Maximum Terminate-Request transmissions */
-#define FSM_DEFMAXCONFREQS	10	/* Maximum Configure-Request transmissions */
-#define FSM_DEFMAXNAKLOOPS	5	/* Maximum number of nak loops */
-
-#define UPAP_DEFTIMEOUT		6	/* Timeout (seconds) for retransmitting req */
-#define UPAP_DEFREQTIME		30	/* Time to wait for auth-req from peer */
-
-#define CHAP_DEFTIMEOUT		6	/* Timeout time in seconds */
-#define CHAP_DEFTRANSMITS	10	/* max # times to send challenge */
-
-
-/* Interval in seconds between keepalive echo requests, 0 to disable. */
-#if 1
-#define LCP_ECHOINTERVAL 0
-#else
-#define LCP_ECHOINTERVAL 10
-#endif
-
-/* Number of unanswered echo requests before failure. */
-#define LCP_MAXECHOFAILS 3
-
-/* Max Xmit idle time (in jiffies) before resend flag char. */
-#define PPP_MAXIDLEFLAG 100
-
-/*
- * Packet sizes
- *
- * Note - lcp shouldn't be allowed to negotiate stuff outside these
- *    limits.  See lcp.h in the pppd directory.
- * (XXX - these constants should simply be shared by lcp.c instead
- *    of living in lcp.h)
- */
-#define PPP_MTU     1500     /* Default MTU (size of Info field) */
-#if 0
-#define PPP_MAXMTU  65535 - (PPP_HDRLEN + PPP_FCSLEN)
-#else
-#define PPP_MAXMTU  1500 /* Largest MTU we allow */
-#endif
-#define PPP_MINMTU  64
-#define PPP_MRU     1500     /* default MRU = max length of info field */
-#define PPP_MAXMRU  1500     /* Largest MRU we allow */
-#define PPP_DEFMRU	296		/* Try for this */
-#define PPP_MINMRU	128		/* No MRUs below this */
-
-
-#define MAXNAMELEN      256     /* max length of hostname or name for auth */
-#define MAXSECRETLEN    256     /* max length of password or secret */
-
-#endif /* PPP_SUPPORT > 0 */
 
 #endif /* __LWIPOPTS_H__ */
