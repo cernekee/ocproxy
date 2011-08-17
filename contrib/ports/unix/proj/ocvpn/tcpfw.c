@@ -21,10 +21,12 @@
 #define MAXHOSTNAMELEN 256
 #endif /* MAXHOSTNAMELEN */
 
+#define THREAD_NAMELEN 64
+
 struct tcpfwc;
 
 typedef struct tcpfw {
-	char name[32];
+	char name[THREAD_NAMELEN];
 	in_port_t lport;
 	const char *rhost;
 	in_port_t rport;
@@ -34,8 +36,8 @@ typedef struct tcpfw {
 } tcpfw_t;
 
 typedef struct tcpfwc {
-	char l2r[32];
-	char r2l[32];
+	char l2r[THREAD_NAMELEN];
+	char r2l[THREAD_NAMELEN];
 	tcpfw_t *p;
 	int local;
 	struct netconn *remote;
@@ -56,7 +58,6 @@ i_tcpfw_init(in_port_t lport, const char *rhost, in_port_t rport, int (*acceptor
 	tcpfw = (tcpfw_t *)malloc(sizeof (*tcpfw));
 	memset(tcpfw, 0, sizeof (*tcpfw));
 
-	sprintf(tcpfw->name, "tcpfw_listen_%d", lport);
 	tcpfw->lport = lport;
 	tcpfw->rhost = rhost;
 	tcpfw->rport = rport;
@@ -70,6 +71,8 @@ i_tcpfw_init(in_port_t lport, const char *rhost, in_port_t rport, int (*acceptor
 		free(tcpfw);
 		return;
 	}
+
+	snprintf(tcpfw->name, THREAD_NAMELEN-1, "tcpfw_listen_port:%d_fd:%d", lport, tcpfw->listen);
 
 	on = 1;
 	if (setsockopt(tcpfw->listen, SOL_SOCKET, SO_REUSEADDR, &on, sizeof (on)) < 0) {
@@ -112,17 +115,21 @@ tcpfw_listen(void *arg)
 	struct sockaddr_in sin;
 	socklen_t alen = sizeof (sin);
 
-	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_listen: listening on port %d.\n", tcpfw->lport));
+	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_listen: listening on port %d ", tcpfw->lport));
+	if (tcpfw->rhost == NULL) {
+		LWIP_DEBUGF(TCPFW_DEBUG, ("(socks).\n"));
+	} else {
+		LWIP_DEBUGF(TCPFW_DEBUG, ("(-> %s:%d).\n", tcpfw->rhost, tcpfw->rport));
+	}
 
 	while ((fd = accept(tcpfw->listen, (struct sockaddr *)&sin, &alen)) >= 0) {
 		tcpfwc_t *c;
-		ip_addr_t rhost_ip;
 
 		c = (tcpfwc_t *)malloc(sizeof (*c));
 		memset(c, 0, sizeof (*c));
 
-		sprintf(c->l2r, "tcpfw_l2r_%d", fd);
-		sprintf(c->r2l, "tcpfw_r2l_%d", fd);
+		snprintf(c->l2r, THREAD_NAMELEN-1, "tcpfw_l2r_port:%d_fd:%d", tcpfw->lport, fd);
+		snprintf(c->r2l, THREAD_NAMELEN-1, "tcpfw_r2l_port:%d_fd:%d", tcpfw->lport, fd);
 		c->alive = 1;
 		c->p = tcpfw;
 		c->local = fd;
@@ -137,15 +144,15 @@ static void
 tcpfw_close(tcpfwc_t *c, int who)
 {
 	tcpfw_t *p = c->p;
-	const char *whom = who == 0 ? "l2r" : "r2l";
+	const char *whom = (who == 0) ? c->l2r : c->r2l;
 
 	pthread_mutex_lock(&p->mutex);
 
 	if (c->alive) {
-		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_close: %s %s part 1.\n", c->p->name, whom));
+		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_close: %s part 1.\n", whom));
 		c->alive = 0;
 	} else {
-		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_close: %s %s part 2.\n", c->p->name, whom));
+		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_close: %s part 2.\n", whom));
 		netconn_close(c->remote);
 		close(c->local);
 
@@ -159,6 +166,8 @@ static void
 tcpfw_l2r(void *arg)
 {
 	tcpfwc_t *c = (tcpfwc_t *)arg;
+
+	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_l2r: %s starts.\n", c->l2r));
 
 	while (c->alive) {
 		char buf[2048];
@@ -178,6 +187,8 @@ static void
 tcpfw_r2l(void *arg)
 {
 	tcpfwc_t *c = (tcpfwc_t *)arg;
+
+	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_r2l: %s starts.\n", c->r2l));
 
 	c->remote->recv_timeout = 1000;
 
@@ -219,15 +230,13 @@ tcpfw_acceptor(tcpfwc_t *c)
 		return (-1);
 	}
 
-	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_acceptor: %s is 0x%x.\n", c->p->rhost, ntohl(rhost_ip.addr)));
-
 	if (netconn_connect(c->remote, &rhost_ip, c->p->rport) != ERR_OK) {
 		perror("netconn_connect");
 		netconn_close(c->remote);
 		return (-1);
 	}
 
-	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_acceptor: connected.\n"));
+	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_acceptor: connected to %s (0x%x).\n", c->p->rhost, ntohl(rhost_ip.addr)));
 
 	sys_thread_new(c->l2r, tcpfw_l2r, c, DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
 	sys_thread_new(c->r2l, tcpfw_r2l, c, DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
@@ -260,7 +269,7 @@ tcpsocks_converse(void *arg)
 
 	/* Check SOCKS version. */
 	if (buf[0] != 5) {
-		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: Unknown SOCKS version: %d.\n", buf[0]));
+		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: unknown SOCKS version: %d.\n", buf[0]));
 		goto kill;
 	}
 
@@ -274,7 +283,7 @@ tcpsocks_converse(void *arg)
 		goto kill;
 
 	if (n < 4) {
-		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: Short read looking for command.\n"));
+		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: short read looking for command.\n"));
 		goto kill;
 	}
 
@@ -282,13 +291,13 @@ tcpsocks_converse(void *arg)
 	    (buf[1] != 1) || /* CONNECT command */
 	    (buf[2] != 0) || /* FLAG 0 */
 	    (buf[3] != 3)) { /* Server resolved */
-		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: Illegal connect command.\n"));
+		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: illegal connect command.\n"));
 		goto kill;
 	}
 
 	rhostlen = buf[4]; /* Length of hostname. */
 	if (n < (4 + rhostlen + 2)) {
-		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: Short read looking for hostname/port.\n"));
+		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: short read looking for hostname/port.\n"));
 		goto kill;
 	}
 
@@ -297,21 +306,19 @@ tcpsocks_converse(void *arg)
 	rhost[rhostlen + 1] = '\0';
 	rport = (buf[5 + rhostlen] << 8) | (buf[5 + rhostlen + 1]);
 
-	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: Connect to %s:%d.\n", rhost, rport));
+	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: connect to %s:%d.\n", rhost, rport));
 
 	if ((err = netconn_gethostbyname(rhost, &rhost_ip)) != ERR_OK) {
 		fprintf(stderr, "tcpsocks_converse: netconn_gethostbyname error %d.\n", err);
 		goto kill;
 	}
 
-	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: %s is 0x%x\n", rhost, ntohl(rhost_ip.addr)));
-
 	if (netconn_connect(c->remote, &rhost_ip, rport) != ERR_OK) {
 		perror("netconn_connect");
 		goto kill;
 	}
 
-	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: connected.\n"));
+	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: connected to %s (0x%x)\n", rhost, ntohl(rhost_ip.addr)));
 
 	/* Good to go. */
 	buf[0] = 5; /* SOCKS version */
