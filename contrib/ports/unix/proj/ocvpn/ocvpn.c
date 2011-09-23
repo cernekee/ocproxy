@@ -92,7 +92,8 @@ tcpip_init_done(void *arg)
 
 	netif_init();
 
-	sprintf(netif_oc.name, "un0");
+	netif_oc.name[0] = 'u';
+	netif_oc.name[1] = '0';
 
 	netif_add(&netif_oc, &ipaddr, &netmask, &gw, NULL, ocif_init_client,
 		  tcpip_input);
