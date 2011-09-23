@@ -77,7 +77,7 @@ COREFILES=$(LWIPDIR)/core/mem.c $(LWIPDIR)/core/memp.c $(LWIPDIR)/core/netif.c \
 CORE4FILES=$(wildcard $(LWIPDIR)/core/ipv4/*.c) $(LWIPDIR)/core/ipv4/inet.c \
 	$(LWIPDIR)/core/ipv4/inet_chksum.c
 
-# APIFILES: The files which implement the sequential and socket APIs.
+# APIFILES: The files which implement the sequential APIs.
 APIFILES=$(LWIPDIR)/api/api_lib.c $(LWIPDIR)/api/api_msg.c $(LWIPDIR)/api/tcpip.c \
 	$(LWIPDIR)/api/err.c $(LWIPDIR)/api/netbuf.c $(LWIPDIR)/api/netdb.c
 
