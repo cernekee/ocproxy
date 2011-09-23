@@ -83,6 +83,7 @@ i_tcpfw_init(in_port_t lport, const char *rhost, in_port_t rport, int (*acceptor
 		return;
 	}
 
+	bzero(&sin, sizeof (sin));
 	sin.sin_family = AF_INET;
 	sin.sin_port = htons(tcpfw->lport);
 	sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
