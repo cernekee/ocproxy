@@ -19,7 +19,7 @@
 #* CISCO_SPLIT_INC_%d_SPORT     -- source port (often just 0)
 #* CISCO_SPLIT_INC_%d_DPORT     -- destination port (often just 0)
 
-exec >/tmp/ocfw.log 2>&1
+exec >/tmp/ocfw.log.$$ 2>&1
 
 # Should really use them all.
 dns=`echo $INTERNAL_IP4_DNS | awk '{print \$1;}'`
@@ -27,9 +27,8 @@ dns=`echo $INTERNAL_IP4_DNS | awk '{print \$1;}'`
 # DMALLOC_OPTIONS=debug=0x4f4ed03,log=/tmp/dmalloc.log
 # export DMALLOC_OPTIONS
 
-#valgrind --log-file=/tmp/valgrind.log --leak-check=full --track-origins=yes \
-#    --malloc-fill=de --free-fill=ad \
-#
+valgrind --log-file=/tmp/valgrind.log.$$ --leak-check=full --track-origins=yes \
+    --malloc-fill=de --free-fill=ad \
 ./ocvpn \
     -v \
     -i $INTERNAL_IP4_ADDRESS \
