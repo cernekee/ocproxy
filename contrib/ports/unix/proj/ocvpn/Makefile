@@ -49,9 +49,9 @@ CFLAGS=-g -D$(ARCH) -DIPv4 -DLWIP_DEBUG \
 # -ansi
 # -std=c89
 
-LDFLAGS=-lpthread -lutil
+LDLIBS=-lpthread -lutil
 # For Solaris use:
-# LDFLAGS=-lpthread -lsocket -lnsl
+# LDLIBS=-lpthread -lsocket -lnsl
 
 CONTRIBDIR=../../../..
 LWIPARCH=$(CONTRIBDIR)/ports/unix
@@ -119,5 +119,5 @@ $(LWIPLIB): $(LWIPOBJS)
 	$(CCDEP) $(CFLAGS) -MM $^ > .depend || rm -f .depend
 
 ocvpn: .depend $(LWIPLIB) $(APPLIB) ocvpn.o tcpfw.o ocif.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o ocvpn ocvpn.o tcpfw.o ocif.o $(APPLIB) $(LWIPLIB)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o ocvpn ocvpn.o tcpfw.o ocif.o $(APPLIB) $(LWIPLIB) $(LDLIBS)
 
