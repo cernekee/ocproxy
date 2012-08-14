@@ -226,7 +226,7 @@ tcpfw_acceptor(tcpfwc_t *c)
 	ip_addr_t rhost_ip;
 
 	if ((err = netconn_gethostbyname(c->p->rhost, &rhost_ip)) != ERR_OK) {
-		fprintf(stderr, "tcpfw_acceptor: netconn_gethostbyname error %d.", err);
+		fprintf(stderr, "tcpfw_acceptor: netconn_gethostbyname (%s) error %d.", c->p->rhost, err);
 		netconn_close(c->remote);
 		return (-1);
 	}
@@ -304,13 +304,12 @@ tcpsocks_converse(void *arg)
 
 	memset(rhost, 0, MAXHOSTNAMELEN);
 	memcpy(rhost, &buf[5], rhostlen);
-	rhost[rhostlen + 1] = '\0';
 	rport = (buf[5 + rhostlen] << 8) | (buf[5 + rhostlen + 1]);
 
 	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: connect to %s:%d.\n", rhost, rport));
 
 	if ((err = netconn_gethostbyname(rhost, &rhost_ip)) != ERR_OK) {
-		fprintf(stderr, "tcpsocks_converse: netconn_gethostbyname error %d.\n", err);
+		fprintf(stderr, "tcpsocks_converse: netconn_gethostbyname (%s) error %d.\n", rhost, err);
 		goto kill;
 	}
 
@@ -336,10 +335,8 @@ tcpsocks_converse(void *arg)
 
 	write(c->local, buf, 10);
 
-	sys_thread_new(c->l2r, tcpfw_l2r, c,
-		       DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
-	sys_thread_new(c->r2l, tcpfw_r2l, c,
-		       DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
+	sys_thread_new(c->l2r, tcpfw_l2r, c, DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
+	sys_thread_new(c->r2l, tcpfw_r2l, c, DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
 
 	return;
  kill:

@@ -84,10 +84,10 @@ ocif_input(void *arg)
 		struct pbuf *p;
 
 		if ((len = read(ocif->fd, buf, 2048)) < 0) {
-			perror("ocif_input: read");
-			abort();
+			LWIP_DEBUGF(OCIF_DEBUG, ("ocif_input: failed to read data (%d).\n", len));
+			continue;
 		}
-		LWIP_DEBUGF(OCIF_DEBUG, ("ocif_input: read %d bytes\n", len));
+		LWIP_DEBUGF(OCIF_DEBUG, ("ocif_input: read %d bytes.\n", len));
 
 		if ((p = pbuf_alloc(PBUF_RAW, len, PBUF_POOL)) != NULL) {
 			char *bufptr;
@@ -107,7 +107,7 @@ ocif_input(void *arg)
 			tcpdump(p);
 			netif->input(p, netif);
 		} else {
-			LWIP_DEBUGF(OCIF_DEBUG, ("ocif_input: could not allocate pbuf\n"));
+			LWIP_DEBUGF(OCIF_DEBUG, ("ocif_input: could not allocate pbuf.\n"));
 		}
 	}
 }
@@ -120,6 +120,7 @@ ocif_output(struct netif *netif, struct pbuf *p, ip_addr_t *ipaddr)
 	int nchunks;
 	unsigned short plen;
 	char *data, *bp;
+	ssize_t r;
 	LWIP_UNUSED_ARG(ipaddr);
 
 	ocif = (struct ocif *)netif->state;
@@ -129,8 +130,8 @@ ocif_output(struct netif *netif, struct pbuf *p, ip_addr_t *ipaddr)
 	plen = p->tot_len;
 
 	if (plen == 0) {
-		LWIP_DEBUGF(OCIF_DEBUG, ("packet length == 0!\n"));
-		abort();
+		LWIP_DEBUGF(OCIF_DEBUG, ("ocif_output: packet length == 0!\n"));
+		goto done;
 	}
 
 	for (q = p, nchunks = 0; q != NULL; q = q->next, nchunks++) {
@@ -142,34 +143,37 @@ ocif_output(struct netif *netif, struct pbuf *p, ip_addr_t *ipaddr)
 	}
 
 	if (nchunks <= MAX_IOVEC) {
-		LWIP_DEBUGF(OCIF_DEBUG, ("ocif_output: sending %d (%d) bytes (writev)\n",
-					 p->len, plen));
+		LWIP_DEBUGF(OCIF_DEBUG, ("ocif_output: sending %d (%d) bytes (writev).\n", p->len, plen));
 
-		if (writev(ocif->fd, (const struct iovec *)&ocif->iov, nchunks) != plen) {
-			LWIP_DEBUGF(OCIF_DEBUG, ("failed to write %d bytes (writev)\n",
-						 plen));
-			abort();
+		if ((r = writev(ocif->fd, (const struct iovec *)&ocif->iov, nchunks)) != plen) {
+			LWIP_DEBUGF(OCIF_DEBUG, ("ocif_output: failed to write %d bytes (%ld) (writev).\n", plen, r));
+			goto done;
 		}
 	} else {
 		/* Have to copy. */
 		data = (char *)malloc(plen);
+		if (data == NULL) {
+			LWIP_DEBUGF(OCIF_DEBUG, ("ocif_output: cannot allocated %d bytes for packet copy.\n", plen));
+			goto done;
+		}
 
 		if (pbuf_copy_partial(p, data, plen, 0) != plen) {
-			LWIP_DEBUGF(OCIF_DEBUG, ("failed to copy data\n"));
-			abort();
+			LWIP_DEBUGF(OCIF_DEBUG, ("ocif_output: failed to copy %d bytes of data.\n", plen));
+			goto free;
 		}
 
-		LWIP_DEBUGF(OCIF_DEBUG, ("ocif_output: sending %d (%d) bytes\n",
-					 p->len, plen));
+		LWIP_DEBUGF(OCIF_DEBUG, ("ocif_output: sending %d (%d) bytes.\n", p->len, plen));
 
-		if (write(ocif->fd, data, plen) == -1) {
-			perror("ocif_output: write");
-			abort();
+		if ((r = write(ocif->fd, data, plen)) != plen) {
+			LWIP_DEBUGF(OCIF_DEBUG, ("ocif_output: failed to write %d bytes (%ld) (write).\n", plen, r));
+			goto free;
 		}
 
+	free:
 		free(data);
 	}
 
+ done:
 	tcpdump(p);
 	LINK_STATS_INC(link.xmit);
 
@@ -179,6 +183,7 @@ ocif_output(struct netif *netif, struct pbuf *p, ip_addr_t *ipaddr)
 err_t
 ocif_init_client(struct netif *netif)
 {
+	char *vpnfd;
 	struct ocif *ocif;
 
 	ocif = (struct ocif *)malloc(sizeof (*ocif));
@@ -189,9 +194,14 @@ ocif_init_client(struct netif *netif)
 	netif->name[1] = 'n';
 	netif->output = ocif_output;
 
-	/* XXX bogus error check. */
-	if ((ocif->fd = atoi(getenv("VPNFD"))) < 0) {
-		perror("ocif_init");
+	if ((vpnfd = getenv("VPNFD")) == NULL) {
+		LWIP_DEBUGF(OCIF_DEBUG, ("ocif_init_client: no VPNFD?\n"));
+		abort();
+	}
+
+	ocif->fd = (int)strtoul(vpnfd, (char **)NULL, 10);
+	if (errno != 0) {
+		perror("ocif_init_client: cannot parse VPNFD");
 		abort();
 	}
 
