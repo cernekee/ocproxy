@@ -27,8 +27,8 @@ dns=`echo $INTERNAL_IP4_DNS | awk '{print \$1;}'`
 # DMALLOC_OPTIONS=debug=0x4f4ed03,log=/tmp/dmalloc.log
 # export DMALLOC_OPTIONS
 
-valgrind --log-file=/tmp/valgrind.log.$$ --leak-check=full --track-origins=yes \
-    --malloc-fill=de --free-fill=ad \
+# valgrind --log-file=/tmp/valgrind.log.$$ --leak-check=full --track-origins=yes \
+#     --malloc-fill=de --free-fill=ad \
 ./ocvpn \
     -v \
     -i $INTERNAL_IP4_ADDRESS \
