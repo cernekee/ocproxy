@@ -226,7 +226,7 @@ tcpfw_acceptor(tcpfwc_t *c)
 	ip_addr_t rhost_ip;
 
 	if ((err = netconn_gethostbyname(c->p->rhost, &rhost_ip)) != ERR_OK) {
-		fprintf(stderr, "tcpfw_acceptor: netconn_gethostbyname (%s) error %d.", c->p->rhost, err);
+		fprintf(stderr, "tcpfw_acceptor: netconn_gethostbyname (%s) error %d.\n", c->p->rhost, err);
 		netconn_close(c->remote);
 		return (-1);
 	}
