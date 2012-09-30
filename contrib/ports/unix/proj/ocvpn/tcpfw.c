@@ -152,6 +152,16 @@ tcpfw_adjust_refcnt(tcpfwc_t *c, int adj_val)
 }
 
 static void
+tcpfw_close(tcpfwc_t *c)
+{
+	if (tcpfw_adjust_refcnt(c, -1) == 0) {
+		close(c->local);
+		netconn_delete(c->remote);
+		free(c);
+	}
+}
+
+static void
 tcpfw_l2r(void *arg)
 {
 	tcpfwc_t *c = (tcpfwc_t *)arg;
@@ -175,13 +185,7 @@ tcpfw_l2r(void *arg)
 
 		netconn_write(c->remote, buf, n, NETCONN_COPY);
 	}
-
-	/* kill remote if the local peer closed the connection first */
-	netconn_close(c->remote);
-	if (tcpfw_adjust_refcnt(c, -1) == 0) {
-		netconn_delete(c->remote);
-		free(c);
-	}
+	tcpfw_close(c);
 }
 
 static void
@@ -215,13 +219,7 @@ tcpfw_r2l(void *arg)
 
 		netbuf_delete(nbuf);
 	}
-
-	/* kill local if the remote peer closed the connection first */
-	close(c->local);
-	if (tcpfw_adjust_refcnt(c, -1) == 0) {
-		netconn_delete(c->remote);
-		free(c);
-	}
+	tcpfw_close(c);
 }
 
 static void
