@@ -111,6 +111,10 @@ introduce_thread(pthread_t id)
 {
   struct sys_thread *thread;
 
+  /* FIXME: This memory is never freed - skip it */
+  if (1)
+	  return (void *)1;
+
   thread = (struct sys_thread *)malloc(sizeof(struct sys_thread));
 
   if (thread != NULL) {
