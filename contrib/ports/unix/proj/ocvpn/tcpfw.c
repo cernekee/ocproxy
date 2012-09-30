@@ -31,7 +31,7 @@ typedef struct tcpfw {
 	const char *rhost;
 	in_port_t rport;
 	int listen;
-	int (*acceptor)(struct tcpfwc *);
+	void (*acceptor)(struct tcpfwc *);
 } tcpfw_t;
 
 typedef struct tcpfwc {
@@ -48,7 +48,7 @@ static void tcpfw_l2r(void *);
 static void tcpfw_r2l(void *);
 
 static void
-i_tcpfw_init(in_port_t lport, const char *rhost, in_port_t rport, int (*acceptor)(tcpfwc_t *))
+i_tcpfw_init(in_port_t lport, const char *rhost, in_port_t rport, void (*acceptor)(tcpfwc_t *))
 {
 	tcpfw_t *tcpfw;
 	struct sockaddr_in sin;
@@ -134,8 +134,7 @@ tcpfw_listen(void *arg)
 		c->local = fd;
 		c->remote = netconn_new(NETCONN_TCP);
 
-		if (c->p->acceptor(c) < 0)
-			free(c);
+		c->p->acceptor(c);
 	}
 }
 
@@ -179,8 +178,10 @@ tcpfw_l2r(void *arg)
 
 	/* kill remote if the local peer closed the connection first */
 	netconn_close(c->remote);
-	if (tcpfw_adjust_refcnt(c, -1) == 0)
+	if (tcpfw_adjust_refcnt(c, -1) == 0) {
+		netconn_delete(c->remote);
 		free(c);
+	}
 }
 
 static void
@@ -217,11 +218,13 @@ tcpfw_r2l(void *arg)
 
 	/* kill local if the remote peer closed the connection first */
 	close(c->local);
-	if (tcpfw_adjust_refcnt(c, -1) == 0)
+	if (tcpfw_adjust_refcnt(c, -1) == 0) {
+		netconn_delete(c->remote);
 		free(c);
+	}
 }
 
-static int
+static void
 tcpfw_acceptor(tcpfwc_t *c)
 {
 	err_t err;
@@ -229,20 +232,24 @@ tcpfw_acceptor(tcpfwc_t *c)
 
 	if ((err = netconn_gethostbyname(c->p->rhost, &rhost_ip)) != ERR_OK) {
 		fprintf(stderr, "tcpfw_acceptor: netconn_gethostbyname (%s) error %d.\n", c->p->rhost, err);
-		netconn_close(c->remote);
-		return (-1);
+		goto kill;
 	}
 
 	if (netconn_connect(c->remote, &rhost_ip, c->p->rport) != ERR_OK) {
 		perror("netconn_connect");
-		netconn_close(c->remote);
-		return (-1);
+		goto kill;
 	}
 
 	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_acceptor: connected to %s (0x%x).\n", c->p->rhost, ntohl(rhost_ip.addr)));
 
 	sys_thread_new(c->l2r, tcpfw_l2r, c, DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
 	sys_thread_new(c->r2l, tcpfw_r2l, c, DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
+	return;
+
+ kill:
+	netconn_delete(c->remote);
+	close(c->local);
+	free(c);
 }
 
 void
@@ -353,11 +360,12 @@ tcpsocks_converse(void *arg)
 
 	return;
  kill:
+	netconn_delete(c->remote);
 	close(c->local);
 	free(c);
 }
 
-static int
+static void
 tcpsocks_acceptor(tcpfwc_t *c)
 {
 	sys_thread_new(c->l2r, tcpsocks_converse, c,
