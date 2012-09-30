@@ -38,6 +38,7 @@ ARCH=unix
 # For Solaris remove:
 # -Wc++-compat
 CFLAGS=-g -D$(ARCH) -DIPv4 -DLWIP_DEBUG \
+	-DDEFAULT_THREAD_STACKSIZE=65536 -DTCPIP_THREAD_STACKSIZE=65536 \
 	-pedantic -Werror -Wall
 # not used for now but interesting:
 # -Wpacked
