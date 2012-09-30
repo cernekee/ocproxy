@@ -102,7 +102,7 @@ tcpip_init_done(void *arg)
 	netif_set_up(&netif_oc);
 
 	dns_init();
-	dns_setserver(1, &dns);
+	dns_setserver(0, &dns);
 	tcpecho_init();
 	udpecho_init();
 
