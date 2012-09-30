@@ -255,7 +255,7 @@ tcpsocks_converse(void *arg)
 	tcpfwc_t *c = (tcpfwc_t *)arg;
 	err_t err;
 	struct netbuf *nbuf;
-	char buf[256];
+	unsigned char buf[256];
 	int n;
 	int rhostlen;
 	char rhost[MAXHOSTNAMELEN];
