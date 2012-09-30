@@ -288,28 +288,36 @@ tcpsocks_converse(void *arg)
 		goto kill;
 	}
 
-	if ((buf[0] != 5) || /* SOCKS verison 5 */
-	    (buf[1] != 1) || /* CONNECT command */
-	    (buf[2] != 0) || /* FLAG 0 */
-	    (buf[3] != 3)) { /* Server resolved */
+	if ((buf[0] != 5) || /* SOCKS version 5 */
+	    (buf[1] != 1) || /* TCP CONNECT command */
+	    (buf[2] != 0)) { /* FLAG 0 */
 		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: illegal connect command.\n"));
 		goto kill;
 	}
 
 	rhostlen = buf[4]; /* Length of hostname. */
-	if (n < (4 + rhostlen + 2)) {
-		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: short read looking for hostname/port.\n"));
-		goto kill;
-	}
 
-	memset(rhost, 0, MAXHOSTNAMELEN);
-	memcpy(rhost, &buf[5], rhostlen);
-	rport = (buf[5 + rhostlen] << 8) | (buf[5 + rhostlen + 1]);
+	if (buf[3] == 3) { /* Address type: ASCII domain name */
+		if (n < (4 + rhostlen + 2)) {
+			LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: short read looking for hostname/port.\n"));
+			goto kill;
+		}
 
-	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: connect to %s:%d.\n", rhost, rport));
+		memset(rhost, 0, MAXHOSTNAMELEN);
+		memcpy(rhost, &buf[5], rhostlen);
+		rport = (buf[5 + rhostlen] << 8) | (buf[5 + rhostlen + 1]);
 
-	if ((err = netconn_gethostbyname(rhost, &rhost_ip)) != ERR_OK) {
-		fprintf(stderr, "tcpsocks_converse: netconn_gethostbyname (%s) error %d.\n", rhost, err);
+		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: connect to %s:%d.\n", rhost, rport));
+
+		if ((err = netconn_gethostbyname(rhost, &rhost_ip)) != ERR_OK) {
+			fprintf(stderr, "tcpsocks_converse: netconn_gethostbyname (%s) error %d.\n", rhost, err);
+			goto kill;
+		}
+	} else if (buf[3] == 1) { /* Address type: "raw" IPv4 address */
+		IP4_ADDR(&rhost_ip, buf[4], buf[5], buf[6], buf[7]);
+		rport = (buf[8] << 8) | buf[9];
+	} else {
+		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: unsupported address type %d.\n", buf[3]));
 		goto kill;
 	}
 
