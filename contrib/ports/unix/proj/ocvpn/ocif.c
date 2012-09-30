@@ -119,7 +119,7 @@ ocif_output(struct netif *netif, struct pbuf *p, ip_addr_t *ipaddr)
 	struct pbuf *q;
 	int nchunks;
 	unsigned short plen;
-	char *data, *bp;
+	char *data;
 	ssize_t r;
 	LWIP_UNUSED_ARG(ipaddr);
 
@@ -178,6 +178,7 @@ ocif_output(struct netif *netif, struct pbuf *p, ip_addr_t *ipaddr)
 	LINK_STATS_INC(link.xmit);
 
 	pbuf_free(p);
+	return ERR_OK;
 }
 
 err_t

@@ -263,14 +263,12 @@ tcpsocks_converse(void *arg)
 {
 	tcpfwc_t *c = (tcpfwc_t *)arg;
 	err_t err;
-	struct netbuf *nbuf;
 	unsigned char buf[256];
 	int n;
 	int rhostlen;
 	char rhost[MAXHOSTNAMELEN];
 	in_port_t rport, lport;
 	ip_addr_t rhost_ip, lhost_ip;
-	struct sockaddr_in sin;
 
 	/* Wait for the client to tell us their preferred version,
 	 * authentication methods, etc. */
