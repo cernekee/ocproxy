@@ -1,11 +1,11 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <arpa/inet.h>
-#include <pthread.h>
 
 #include "lwip/opt.h"
 #include "lwip/arch.h"
@@ -32,7 +32,6 @@ typedef struct tcpfw {
 	in_port_t rport;
 	int listen;
 	int (*acceptor)(struct tcpfwc *);
-	pthread_mutex_t mutex;
 } tcpfw_t;
 
 typedef struct tcpfwc {
@@ -41,7 +40,7 @@ typedef struct tcpfwc {
 	tcpfw_t *p;
 	int local;
 	struct netconn *remote;
-	int alive;
+	int refcnt;
 } tcpfwc_t;
 
 static void tcpfw_listen(void *);
@@ -62,7 +61,6 @@ i_tcpfw_init(in_port_t lport, const char *rhost, in_port_t rport, int (*acceptor
 	tcpfw->rhost = rhost;
 	tcpfw->rport = rport;
 	tcpfw->acceptor = acceptor;
-	pthread_mutex_init(&tcpfw->mutex, NULL);
 
 	tcpfw->listen = socket(AF_INET, SOCK_STREAM, 0);
 	if (tcpfw->listen < 0) {
@@ -131,7 +129,7 @@ tcpfw_listen(void *arg)
 
 		snprintf(c->l2r, THREAD_NAMELEN-1, "tcpfw_l2r_port:%d_fd:%d", tcpfw->lport, fd);
 		snprintf(c->r2l, THREAD_NAMELEN-1, "tcpfw_r2l_port:%d_fd:%d", tcpfw->lport, fd);
-		c->alive = 1;
+		c->refcnt = 2;
 		c->p = tcpfw;
 		c->local = fd;
 		c->remote = netconn_new(NETCONN_TCP);
@@ -141,26 +139,17 @@ tcpfw_listen(void *arg)
 	}
 }
 
-static void
-tcpfw_close(tcpfwc_t *c, int who)
+static int
+tcpfw_adjust_refcnt(tcpfwc_t *c, int adj_val)
 {
-	tcpfw_t *p = c->p;
-	const char *whom = (who == 0) ? c->l2r : c->r2l;
+	int ret;
 
-	pthread_mutex_lock(&p->mutex);
+	sys_prot_t pval = sys_arch_protect();
+	c->refcnt += adj_val;
+	ret = c->refcnt;
+	sys_arch_unprotect(pval);
 
-	if (c->alive) {
-		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_close: %s part 1.\n", whom));
-		c->alive = 0;
-	} else {
-		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_close: %s part 2.\n", whom));
-		netconn_close(c->remote);
-		close(c->local);
-
-		free(c);
-	}
-
-	pthread_mutex_unlock(&p->mutex);
+	return ret;
 }
 
 static void
@@ -170,9 +159,16 @@ tcpfw_l2r(void *arg)
 
 	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_l2r: %s starts.\n", c->l2r));
 
-	while (c->alive) {
+	while (tcpfw_adjust_refcnt(c, 0) == 2) {
 		char buf[2048];
 		int n;
+		struct timeval tv = { 0, 100000 };
+		fd_set fds;
+
+		FD_ZERO(&fds);
+		FD_SET(c->local, &fds);
+		if (select(c->local + 1, &fds, NULL, NULL, &tv) == 0)
+			continue;
 
 		n = read(c->local, buf, 2048);
 		if (n <= 0)
@@ -181,7 +177,10 @@ tcpfw_l2r(void *arg)
 		netconn_write(c->remote, buf, n, NETCONN_COPY);
 	}
 
-	tcpfw_close(c, 0);
+	/* kill remote if the local peer closed the connection first */
+	netconn_close(c->remote);
+	if (tcpfw_adjust_refcnt(c, -1) == 0)
+		free(c);
 }
 
 static void
@@ -191,9 +190,9 @@ tcpfw_r2l(void *arg)
 
 	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_r2l: %s starts.\n", c->r2l));
 
-	c->remote->recv_timeout = 1000;
+	c->remote->recv_timeout = 100;
 
-	while (c->alive) {
+	while (tcpfw_adjust_refcnt(c, 0) == 2) {
 		err_t err;
 		struct netbuf *nbuf;
 
@@ -216,7 +215,10 @@ tcpfw_r2l(void *arg)
 		netbuf_delete(nbuf);
 	}
 
-	tcpfw_close(c, 1);
+	/* kill local if the remote peer closed the connection first */
+	close(c->local);
+	if (tcpfw_adjust_refcnt(c, -1) == 0)
+		free(c);
 }
 
 static int
