@@ -214,7 +214,8 @@ main(int argc, char *argv[])
 		return (1);
 	}
 
-	tcpdump_init();
+	if (debug_flags & LWIP_DBG_ON)
+		tcpdump_init();
 
 	/* Debugging help. */
 	(void) signal(SIGPIPE, SIG_IGN);

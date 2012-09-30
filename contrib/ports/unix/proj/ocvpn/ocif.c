@@ -104,7 +104,8 @@ ocif_input(void *arg)
 				q = q->next;
 			}
 			LINK_STATS_INC(link.recv);
-			tcpdump(p);
+			if (debug_flags & LWIP_DBG_ON)
+				tcpdump(p);
 			netif->input(p, netif);
 		} else {
 			LWIP_DEBUGF(OCIF_DEBUG, ("ocif_input: could not allocate pbuf.\n"));
@@ -174,7 +175,8 @@ ocif_output(struct netif *netif, struct pbuf *p, ip_addr_t *ipaddr)
 	}
 
  done:
-	tcpdump(p);
+	if (debug_flags & LWIP_DBG_ON)
+		tcpdump(p);
 	LINK_STATS_INC(link.xmit);
 
 	pbuf_free(p);
