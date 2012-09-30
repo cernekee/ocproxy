@@ -259,8 +259,8 @@ tcpsocks_converse(void *arg)
 	int n;
 	int rhostlen;
 	char rhost[MAXHOSTNAMELEN];
-	in_port_t rport;
-	ip_addr_t rhost_ip;
+	in_port_t rport, lport;
+	ip_addr_t rhost_ip, lhost_ip;
 	struct sockaddr_in sin;
 
 	/* Wait for the client to tell us their preferred version,
@@ -325,13 +325,16 @@ tcpsocks_converse(void *arg)
 	buf[1] = 0; /* report success */
 	buf[2] = 0; /* Reserved */
 	buf[3] = 1; /* IPV4 Address and port follow */
-	/* XXX are these the right address and port? */
-	buf[4] = rhost_ip.addr >> 24;
-	buf[5] = rhost_ip.addr >> 16;
-	buf[6] = rhost_ip.addr >> 8;
-	buf[7] = rhost_ip.addr;
-	buf[8] = rport >> 8;
-	buf[9] = rport;
+
+	if ((err = netconn_getaddr(c->remote, &lhost_ip, &lport, 1)) != ERR_OK)
+		fprintf(stderr, "tcpsocks_converse: netconn_getaddr (%s) error %d.\n", rhost, err);
+
+	buf[4] = lhost_ip.addr >> 24;
+	buf[5] = lhost_ip.addr >> 16;
+	buf[6] = lhost_ip.addr >> 8;
+	buf[7] = lhost_ip.addr;
+	buf[8] = lport >> 8;
+	buf[9] = lport;
 
 	write(c->local, buf, 10);
 
