@@ -235,8 +235,8 @@ tcpfw_acceptor(tcpfwc_t *c)
 		goto kill;
 	}
 
-	if (netconn_connect(c->remote, &rhost_ip, c->p->rport) != ERR_OK) {
-		perror("netconn_connect");
+	if ((err = netconn_connect(c->remote, &rhost_ip, c->p->rport)) != ERR_OK) {
+		fprintf(stderr, "tcpfw_acceptor: netconn_connect (%s) error %d.\n", c->p->rhost, err);
 		goto kill;
 	}
 
@@ -328,8 +328,9 @@ tcpsocks_converse(void *arg)
 		goto kill;
 	}
 
-	if (netconn_connect(c->remote, &rhost_ip, rport) != ERR_OK) {
-		perror("netconn_connect");
+	if ((err = netconn_connect(c->remote, &rhost_ip, rport)) != ERR_OK) {
+		fprintf(stderr, "tcpsocks_converse: netconn_connect (0x%x) error %d.\n",
+				ntohl(rhost_ip.addr), err);
 		goto kill;
 	}
 
