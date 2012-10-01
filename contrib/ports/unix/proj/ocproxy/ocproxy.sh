@@ -29,7 +29,7 @@ dns=`echo $INTERNAL_IP4_DNS | awk '{print \$1;}'`
 
 # valgrind --log-file=/tmp/valgrind.log.$$ --leak-check=full --track-origins=yes \
 #     --malloc-fill=de --free-fill=ad \
-./ocvpn \
+./ocproxy \
     -v \
     -i $INTERNAL_IP4_ADDRESS \
     -n $INTERNAL_IP4_NETMASK \

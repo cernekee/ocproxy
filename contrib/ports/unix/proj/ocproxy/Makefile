@@ -95,11 +95,11 @@ APPOBJS=$(notdir $(APPFILES:.c=.o))
 %.o:
 	$(CC) $(CFLAGS) -c $(<:.o=.c)
 
-all ipv4 compile: ocvpn
+all ipv4 compile: ocproxy
 .PHONY: all
 
 clean:
-	rm -f *.o $(LWIPLIB) $(APPLIB) ocvpn *.s .depend* *.core core
+	rm -f *.o $(LWIPLIB) $(APPLIB) ocproxy *.s .depend* *.core core
 
 depend dep: .depend
 
@@ -111,9 +111,9 @@ $(APPLIB): $(APPOBJS)
 $(LWIPLIB): $(LWIPOBJS)
 	$(AR) $(ARFLAGS) $(LWIPLIB) $?
 
-.depend: ocvpn.c tcpfw.c ocif.c $(LWIPFILES) $(APPFILES)
+.depend: ocproxy.c tcpfw.c ocif.c $(LWIPFILES) $(APPFILES)
 	$(CCDEP) $(CFLAGS) -MM $^ > .depend || rm -f .depend
 
-ocvpn: .depend $(LWIPLIB) $(APPLIB) ocvpn.o tcpfw.o ocif.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o ocvpn ocvpn.o tcpfw.o ocif.o $(APPLIB) $(LWIPLIB) $(LDLIBS)
+ocproxy: .depend $(LWIPLIB) $(APPLIB) ocproxy.o tcpfw.o ocif.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o ocproxy ocproxy.o tcpfw.o ocif.o $(APPLIB) $(LWIPLIB) $(LDLIBS)
 
