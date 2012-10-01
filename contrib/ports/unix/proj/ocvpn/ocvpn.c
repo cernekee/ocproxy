@@ -99,7 +99,7 @@ tcpip_init_done(void *arg)
 	netif_set_up(&netif_oc);
 
 	dns_init();
-	dns_setserver(1, &dns);
+	dns_setserver(0, &dns);
 
 	if (socks_port != 0)
 		tcpsocks_init(socks_port);
@@ -209,7 +209,8 @@ main(int argc, char *argv[])
 		return (1);
 	}
 
-	tcpdump_init();
+	if (debug_flags & LWIP_DBG_ON)
+		tcpdump_init();
 
 	/* Debugging help. */
 	(void) signal(SIGPIPE, SIG_IGN);

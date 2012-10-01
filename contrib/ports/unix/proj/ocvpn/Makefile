@@ -38,11 +38,8 @@ ARCH=unix
 # For Solaris remove:
 # -Wc++-compat
 CFLAGS=-g -D$(ARCH) -DIPv4 -DLWIP_DEBUG \
-	-pedantic -Werror \
-	-Wparentheses -Wsequence-point -Wswitch-default \
-	-Wextra -Wundef -Wshadow -Wpointer-arith -Wbad-function-cast \
-	-Wc++-compat -Wwrite-strings -Wold-style-definition \
-	-Wmissing-prototypes -Wredundant-decls -Wnested-externs
+	-DDEFAULT_THREAD_STACKSIZE=65536 -DTCPIP_THREAD_STACKSIZE=65536 \
+	-pedantic -Werror -Wall
 # not used for now but interesting:
 # -Wpacked
 # -Wunreachable-code

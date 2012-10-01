@@ -35,7 +35,7 @@
 /*
  * Use the libc memory allocator.
  */
-#define MEM_LIBC_MALLOC 1
+#define MEM_LIBC_MALLOC 0
 #define MEM_SIZE_F U32_F
 #define MEMP_MEM_MALLOC 1
 

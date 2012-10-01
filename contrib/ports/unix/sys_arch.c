@@ -111,6 +111,10 @@ introduce_thread(pthread_t id)
 {
   struct sys_thread *thread;
 
+  /* FIXME: This memory is never freed - skip it */
+  if (1)
+	  return (void *)1;
+
   thread = (struct sys_thread *)malloc(sizeof(struct sys_thread));
 
   if (thread != NULL) {
@@ -130,15 +134,20 @@ sys_thread_new(const char *name, lwip_thread_fn function, void *arg, int stacksi
   int code;
   pthread_t tmp;
   struct sys_thread *st = NULL;
+  pthread_attr_t attr;
   LWIP_UNUSED_ARG(name);
-  LWIP_UNUSED_ARG(stacksize);
   LWIP_UNUSED_ARG(prio);
 
+  pthread_attr_init(&attr);
+  if (stacksize) {
+    pthread_attr_setstacksize(&attr, stacksize);
+  }
   code = pthread_create(&tmp,
-                        NULL, 
+                        &attr, 
                         (void *(*)(void *)) 
                         function, 
                         arg);
+  pthread_attr_destroy(&attr);
   
   if (0 == code) {
     st = introduce_thread(tmp);

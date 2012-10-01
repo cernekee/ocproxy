@@ -1,11 +1,11 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <arpa/inet.h>
-#include <pthread.h>
 
 #include "lwip/opt.h"
 #include "lwip/arch.h"
@@ -31,8 +31,7 @@ typedef struct tcpfw {
 	const char *rhost;
 	in_port_t rport;
 	int listen;
-	int (*acceptor)(struct tcpfwc *);
-	pthread_mutex_t mutex;
+	void (*acceptor)(struct tcpfwc *);
 } tcpfw_t;
 
 typedef struct tcpfwc {
@@ -41,7 +40,7 @@ typedef struct tcpfwc {
 	tcpfw_t *p;
 	int local;
 	struct netconn *remote;
-	int alive;
+	int refcnt;
 } tcpfwc_t;
 
 static void tcpfw_listen(void *);
@@ -49,7 +48,7 @@ static void tcpfw_l2r(void *);
 static void tcpfw_r2l(void *);
 
 static void
-i_tcpfw_init(in_port_t lport, const char *rhost, in_port_t rport, int (*acceptor)(tcpfwc_t *))
+i_tcpfw_init(in_port_t lport, const char *rhost, in_port_t rport, void (*acceptor)(tcpfwc_t *))
 {
 	tcpfw_t *tcpfw;
 	struct sockaddr_in sin;
@@ -62,7 +61,6 @@ i_tcpfw_init(in_port_t lport, const char *rhost, in_port_t rport, int (*acceptor
 	tcpfw->rhost = rhost;
 	tcpfw->rport = rport;
 	tcpfw->acceptor = acceptor;
-	pthread_mutex_init(&tcpfw->mutex, NULL);
 
 	tcpfw->listen = socket(AF_INET, SOCK_STREAM, 0);
 	if (tcpfw->listen < 0) {
@@ -131,36 +129,36 @@ tcpfw_listen(void *arg)
 
 		snprintf(c->l2r, THREAD_NAMELEN-1, "tcpfw_l2r_port:%d_fd:%d", tcpfw->lport, fd);
 		snprintf(c->r2l, THREAD_NAMELEN-1, "tcpfw_r2l_port:%d_fd:%d", tcpfw->lport, fd);
-		c->alive = 1;
+		c->refcnt = 2;
 		c->p = tcpfw;
 		c->local = fd;
 		c->remote = netconn_new(NETCONN_TCP);
 
-		if (c->p->acceptor(c) < 0)
-			free(c);
+		c->p->acceptor(c);
 	}
 }
 
-static void
-tcpfw_close(tcpfwc_t *c, int who)
+static int
+tcpfw_adjust_refcnt(tcpfwc_t *c, int adj_val)
 {
-	tcpfw_t *p = c->p;
-	const char *whom = (who == 0) ? c->l2r : c->r2l;
+	int ret;
 
-	pthread_mutex_lock(&p->mutex);
+	sys_prot_t pval = sys_arch_protect();
+	c->refcnt += adj_val;
+	ret = c->refcnt;
+	sys_arch_unprotect(pval);
 
-	if (c->alive) {
-		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_close: %s part 1.\n", whom));
-		c->alive = 0;
-	} else {
-		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_close: %s part 2.\n", whom));
-		netconn_close(c->remote);
+	return ret;
+}
+
+static void
+tcpfw_close(tcpfwc_t *c)
+{
+	if (tcpfw_adjust_refcnt(c, -1) == 0) {
 		close(c->local);
-
+		netconn_delete(c->remote);
 		free(c);
 	}
-
-	pthread_mutex_unlock(&p->mutex);
 }
 
 static void
@@ -170,9 +168,16 @@ tcpfw_l2r(void *arg)
 
 	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_l2r: %s starts.\n", c->l2r));
 
-	while (c->alive) {
+	while (tcpfw_adjust_refcnt(c, 0) == 2) {
 		char buf[2048];
 		int n;
+		struct timeval tv = { 0, 100000 };
+		fd_set fds;
+
+		FD_ZERO(&fds);
+		FD_SET(c->local, &fds);
+		if (select(c->local + 1, &fds, NULL, NULL, &tv) == 0)
+			continue;
 
 		n = read(c->local, buf, 2048);
 		if (n <= 0)
@@ -180,8 +185,7 @@ tcpfw_l2r(void *arg)
 
 		netconn_write(c->remote, buf, n, NETCONN_COPY);
 	}
-
-	tcpfw_close(c, 0);
+	tcpfw_close(c);
 }
 
 static void
@@ -191,9 +195,9 @@ tcpfw_r2l(void *arg)
 
 	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_r2l: %s starts.\n", c->r2l));
 
-	c->remote->recv_timeout = 1000;
+	c->remote->recv_timeout = 100;
 
-	while (c->alive) {
+	while (tcpfw_adjust_refcnt(c, 0) == 2) {
 		err_t err;
 		struct netbuf *nbuf;
 
@@ -215,11 +219,10 @@ tcpfw_r2l(void *arg)
 
 		netbuf_delete(nbuf);
 	}
-
-	tcpfw_close(c, 1);
+	tcpfw_close(c);
 }
 
-static int
+static void
 tcpfw_acceptor(tcpfwc_t *c)
 {
 	err_t err;
@@ -227,20 +230,24 @@ tcpfw_acceptor(tcpfwc_t *c)
 
 	if ((err = netconn_gethostbyname(c->p->rhost, &rhost_ip)) != ERR_OK) {
 		fprintf(stderr, "tcpfw_acceptor: netconn_gethostbyname (%s) error %d.\n", c->p->rhost, err);
-		netconn_close(c->remote);
-		return (-1);
+		goto kill;
 	}
 
-	if (netconn_connect(c->remote, &rhost_ip, c->p->rport) != ERR_OK) {
-		perror("netconn_connect");
-		netconn_close(c->remote);
-		return (-1);
+	if ((err = netconn_connect(c->remote, &rhost_ip, c->p->rport)) != ERR_OK) {
+		fprintf(stderr, "tcpfw_acceptor: netconn_connect (%s) error %d.\n", c->p->rhost, err);
+		goto kill;
 	}
 
 	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpfw_acceptor: connected to %s (0x%x).\n", c->p->rhost, ntohl(rhost_ip.addr)));
 
 	sys_thread_new(c->l2r, tcpfw_l2r, c, DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
 	sys_thread_new(c->r2l, tcpfw_r2l, c, DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
+	return;
+
+ kill:
+	netconn_delete(c->remote);
+	close(c->local);
+	free(c);
 }
 
 void
@@ -254,14 +261,12 @@ tcpsocks_converse(void *arg)
 {
 	tcpfwc_t *c = (tcpfwc_t *)arg;
 	err_t err;
-	struct netbuf *nbuf;
-	char buf[256];
+	unsigned char buf[256];
 	int n;
 	int rhostlen;
 	char rhost[MAXHOSTNAMELEN];
-	in_port_t rport;
-	ip_addr_t rhost_ip;
-	struct sockaddr_in sin;
+	in_port_t rport, lport;
+	ip_addr_t rhost_ip, lhost_ip;
 
 	/* Wait for the client to tell us their preferred version,
 	 * authentication methods, etc. */
@@ -288,33 +293,42 @@ tcpsocks_converse(void *arg)
 		goto kill;
 	}
 
-	if ((buf[0] != 5) || /* SOCKS verison 5 */
-	    (buf[1] != 1) || /* CONNECT command */
-	    (buf[2] != 0) || /* FLAG 0 */
-	    (buf[3] != 3)) { /* Server resolved */
+	if ((buf[0] != 5) || /* SOCKS version 5 */
+	    (buf[1] != 1) || /* TCP CONNECT command */
+	    (buf[2] != 0)) { /* FLAG 0 */
 		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: illegal connect command.\n"));
 		goto kill;
 	}
 
 	rhostlen = buf[4]; /* Length of hostname. */
-	if (n < (4 + rhostlen + 2)) {
-		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: short read looking for hostname/port.\n"));
+
+	if (buf[3] == 3) { /* Address type: ASCII domain name */
+		if (n < (4 + rhostlen + 2)) {
+			LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: short read looking for hostname/port.\n"));
+			goto kill;
+		}
+
+		memset(rhost, 0, MAXHOSTNAMELEN);
+		memcpy(rhost, &buf[5], rhostlen);
+		rport = (buf[5 + rhostlen] << 8) | (buf[5 + rhostlen + 1]);
+
+		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: connect to %s:%d.\n", rhost, rport));
+
+		if ((err = netconn_gethostbyname(rhost, &rhost_ip)) != ERR_OK) {
+			fprintf(stderr, "tcpsocks_converse: netconn_gethostbyname (%s) error %d.\n", rhost, err);
+			goto kill;
+		}
+	} else if (buf[3] == 1) { /* Address type: "raw" IPv4 address */
+		IP4_ADDR(&rhost_ip, buf[4], buf[5], buf[6], buf[7]);
+		rport = (buf[8] << 8) | buf[9];
+	} else {
+		LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: unsupported address type %d.\n", buf[3]));
 		goto kill;
 	}
 
-	memset(rhost, 0, MAXHOSTNAMELEN);
-	memcpy(rhost, &buf[5], rhostlen);
-	rport = (buf[5 + rhostlen] << 8) | (buf[5 + rhostlen + 1]);
-
-	LWIP_DEBUGF(TCPFW_DEBUG, ("tcpsocks_converse: connect to %s:%d.\n", rhost, rport));
-
-	if ((err = netconn_gethostbyname(rhost, &rhost_ip)) != ERR_OK) {
-		fprintf(stderr, "tcpsocks_converse: netconn_gethostbyname (%s) error %d.\n", rhost, err);
-		goto kill;
-	}
-
-	if (netconn_connect(c->remote, &rhost_ip, rport) != ERR_OK) {
-		perror("netconn_connect");
+	if ((err = netconn_connect(c->remote, &rhost_ip, rport)) != ERR_OK) {
+		fprintf(stderr, "tcpsocks_converse: netconn_connect (0x%x) error %d.\n",
+				ntohl(rhost_ip.addr), err);
 		goto kill;
 	}
 
@@ -325,13 +339,16 @@ tcpsocks_converse(void *arg)
 	buf[1] = 0; /* report success */
 	buf[2] = 0; /* Reserved */
 	buf[3] = 1; /* IPV4 Address and port follow */
-	/* XXX are these the right address and port? */
-	buf[4] = rhost_ip.addr >> 24;
-	buf[5] = rhost_ip.addr >> 16;
-	buf[6] = rhost_ip.addr >> 8;
-	buf[7] = rhost_ip.addr;
-	buf[8] = rport >> 8;
-	buf[9] = rport;
+
+	if ((err = netconn_getaddr(c->remote, &lhost_ip, &lport, 1)) != ERR_OK)
+		fprintf(stderr, "tcpsocks_converse: netconn_getaddr (%s) error %d.\n", rhost, err);
+
+	buf[4] = lhost_ip.addr >> 24;
+	buf[5] = lhost_ip.addr >> 16;
+	buf[6] = lhost_ip.addr >> 8;
+	buf[7] = lhost_ip.addr;
+	buf[8] = lport >> 8;
+	buf[9] = lport;
 
 	write(c->local, buf, 10);
 
@@ -340,11 +357,12 @@ tcpsocks_converse(void *arg)
 
 	return;
  kill:
+	netconn_delete(c->remote);
 	close(c->local);
 	free(c);
 }
 
-static int
+static void
 tcpsocks_acceptor(tcpfwc_t *c)
 {
 	sys_thread_new(c->l2r, tcpsocks_converse, c,
