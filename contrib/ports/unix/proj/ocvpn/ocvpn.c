@@ -62,9 +62,6 @@
 
 #include "arch/perf.h"
 
-#include "udpecho.h"
-#include "tcpecho.h"
-
 #include "ocif.h"
 #include "tcpfw.h"
 
@@ -103,8 +100,6 @@ tcpip_init_done(void *arg)
 
 	dns_init();
 	dns_setserver(1, &dns);
-	tcpecho_init();
-	udpecho_init();
 
 	if (socks_port != 0)
 		tcpsocks_init(socks_port);
