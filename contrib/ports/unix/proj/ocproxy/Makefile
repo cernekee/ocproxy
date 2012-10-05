@@ -24,10 +24,11 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY 
 # OF SUCH DAMAGE.
 #
-# This file is part of the lwIP TCP/IP stack.
-# 
 # Author: Adam Dunkels <adam@sics.se>
+# Author: David Edmondson <dme@dme.org>
 #
+# Derived from simhost/Makefile.
+# 
 
 CCDEP=gcc
 CC=gcc
