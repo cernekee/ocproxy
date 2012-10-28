@@ -43,6 +43,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <signal.h>
+#include <string.h>
 
 #include "lwip/mem.h"
 #include "lwip/memp.h"
@@ -76,7 +77,7 @@ typedef struct fwd {
 } fwd_t;
 
 ip_addr_t ipaddr, netmask, gw, dns;
-in_port_t socks_port;
+in_port_t socks_port = 11080;
 fwd_t *forwards;
 
 struct netif netif_oc;
@@ -171,7 +172,37 @@ int
 main(int argc, char *argv[])
 {
 	int opt;
+	char *str;
 
+	/* try to set the defaults from the environment, first */
+	str = getenv("INTERNAL_IP4_ADDRESS");
+	if (str)
+		ipaddr.addr = inet_addr(str);
+
+	str = getenv("INTERNAL_IP4_NETMASK");
+	if (str)
+		netmask.addr = inet_addr(str);
+
+	str = getenv("VPNGATEWAY");
+	if (str)
+		gw.addr = inet_addr(str);
+
+	str = getenv("INTERNAL_IP4_DNS");
+	if (str) {
+		char *p;
+
+		/* this could contain many addresses; just use the first one */
+		str = strdup(str);
+		if (!str)
+			return 1;
+		p = strchr(str, ' ');
+		if (p)
+			*p = 0;
+		dns.addr = inet_addr(str);
+		free(str);
+	}
+
+	/* override with command line options */
 	while ((opt = getopt(argc, argv, "i:n:g:d:D:L:v")) != -1) {
 		switch (opt) {
 		case 'i':
