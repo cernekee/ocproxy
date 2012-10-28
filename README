@@ -1,6 +1,6 @@
 A quick and dirty attempt to build a user-level SOCKS and port
 forwarding proxy for OpenConnect using LwIP.
 
-See contrib/ports/unix/proj/ocvpn. Start with run-ocvpn.sh.
+See contrib/ports/unix/proj/ocproxy. Start with run-ocvpn.sh.
 
 dme@dme.org, 2011-08-16
