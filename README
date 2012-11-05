@@ -1,6 +1,61 @@
-A quick and dirty attempt to build a user-level SOCKS and port
-forwarding proxy for OpenConnect using LwIP.
+ocproxy is a user-level SOCKS and port forwarding proxy for OpenConnect
+based on lwIP.  When using ocproxy, OpenConnect only handles network
+activity that the user specifically asks to proxy, so the VPN interface
+no longer "hijacks" all network traffic on the host.
 
-See contrib/ports/unix/proj/ocproxy. Start with run-ocvpn.sh.
+Commonly used options include:
+
+  -D port                   Set up a SOCKS5 server on PORT
+  -L lport:rhost:rport      Connections to localhost:LPORT will be redirected
+                            over the VPN to RHOST:RPORT
+  -g                        Allow non-local clients.  Must be the first option.
+  -k interval               Send TCP keepalive every INTERVAL seconds, to
+                            prevent connection timeouts
+
+
+Dependencies:
+
+libevent - *.so library and headers
+
+
+Building:
+
+cd contrib/ports/unix/proj/ocproxy
+make
+
+
+Sample usage:
+
+openconnect --script-tun --script \
+    "./ocproxy -L 2222:unix-host:22 -L 3389:win-host:3389 -D 11080" \
+    vpn.example.com
+
+ssh -p2222 localhost
+rdesktop localhost
+socksify ssh unix-host
+tsocks ssh 172.16.1.2
+...
+
+OpenConnect can (and should) be run as a non-root user when using ocproxy.
+
+
+Sample tsocks.conf (no DNS):
+
+server = 127.0.0.1
+server_type = 5
+server_port = 11080
+
+
+Sample socks.conf for Dante (DNS lookups via SOCKS5 "DOMAIN" addresses):
+
+resolveprotocol: fake
+route {
+        from: 0.0.0.0/0 to: 0.0.0.0/0 via: 127.0.0.1 port = 11080
+        command: connect
+        proxyprotocol: socks_v5
+}
+
+
+See also: ocproxy.sh, run-ocvpn.sh.
 
 dme@dme.org, 2011-08-16
