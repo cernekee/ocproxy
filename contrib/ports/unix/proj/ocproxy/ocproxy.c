@@ -311,7 +311,7 @@ static err_t recv_cb(void *ctx, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
 	ssize_t wlen;
 
 	if (!s)
-		return ERR_OK;
+		return ERR_ABRT;
 
 	if (!p) {
 		ocp_sock_del(s);
