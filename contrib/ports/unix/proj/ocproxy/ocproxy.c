@@ -736,6 +736,7 @@ static struct option longopts[] = {
 	{ "ip",			1,	NULL,	'I' },
 	{ "netmask",		1,	NULL,	'N' },
 	{ "gw",			1,	NULL,	'G' },
+	{ "mtu",		1,	NULL,	'M' },
 	{ "dns",		1,	NULL,	'd' },
 	{ "localfw",		1,	NULL,	'L' },
 	{ "dynfw",		1,	NULL,	'D' },
@@ -750,7 +751,7 @@ int main(int argc, char **argv)
 {
 	int opt, dns_count = 0, i, vpnfd;
 	char *str;
-	char *ip_str, *netmask_str, *gw_str, *dns_str;
+	char *ip_str, *netmask_str, *gw_str, *mtu_str, *dns_str;
 	ip_addr_t ip, netmask, gw, dns;
 	in_port_t socks_port = 0;
 	struct ocp_sock *s;
@@ -774,6 +775,7 @@ int main(int argc, char **argv)
 	ip_str = getenv("INTERNAL_IP4_ADDRESS");
 	netmask_str = getenv("INTERNAL_IP4_NETMASK");
 	gw_str = getenv("VPNGATEWAY");
+	mtu_str = getenv("INTERNAL_IP4_MTU");
 	str = getenv("INTERNAL_IP4_DNS");
 	if (str) {
 		char *p;
@@ -787,7 +789,7 @@ int main(int argc, char **argv)
 
 	/* override with command line options */
 	while ((opt = getopt_long(argc, argv,
-				  "I:N:G:d:D:k:gL:vT", longopts, NULL)) != -1) {
+				  "I:N:G:M:d:D:k:gL:vT", longopts, NULL)) != -1) {
 		switch (opt) {
 		case 'I':
 			ip_str = optarg;
@@ -797,6 +799,9 @@ int main(int argc, char **argv)
 			break;
 		case 'G':
 			gw_str = optarg;
+			break;
+		case 'M':
+			mtu_str = optarg;
 			break;
 		case 'd':
 			dns_str = optarg;
@@ -826,8 +831,8 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (!ip_str || !netmask_str || !gw_str)
-		die("missing -I, -N, or -G\n");
+	if (!ip_str || !netmask_str || !gw_str || !mtu_str)
+		die("missing -I, -N, -G, or -M\n");
 
 	if (!ipaddr_aton(ip_str, &ip))
 		die("Invalid IP address: '%s'\n", ip_str);
@@ -857,6 +862,7 @@ int main(int argc, char **argv)
 
 	netif_add(&netif, &ip, &netmask, &gw, s, init_oc_netif,
 		  ip_input);
+	netif.mtu = ocp_atoi(mtu_str);
 
 	netif_set_default(&netif);
 	netif_set_up(&netif);
