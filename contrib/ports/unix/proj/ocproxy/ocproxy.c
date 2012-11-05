@@ -585,6 +585,12 @@ out:
  * lwIP<->VPN traffic
  **********************************************************************/
 
+static void vpn_conn_down(void)
+{
+	printf("ocproxy: VPN connection has terminated\n");
+	exit(0);
+}
+
 /* Called when the VPN sends us a raw IP packet destined for lwIP */
 static void lwip_data_cb(evutil_socket_t fd, short what, void *ctx)
 {
@@ -594,8 +600,8 @@ static void lwip_data_cb(evutil_socket_t fd, short what, void *ctx)
 
 	len = read(s->fd, s->sockbuf, SOCKBUF_LEN);
 	if (len <= 0) {
-		ocp_sock_del(s);
-		return;
+		/* This might never happen, because s->fd is a DGRAM socket */
+		vpn_conn_down();
 	}
 	if ((p = pbuf_alloc(PBUF_RAW, len, PBUF_POOL)) != NULL) {
 		char *bufptr;
@@ -646,6 +652,9 @@ static err_t lwip_data_out(struct netif *netif, struct pbuf *p, ip_addr_t *ipadd
 		LINK_STATS_INC(link.lenerr);
 	else
 		LINK_STATS_INC(link.xmit);
+
+	if (ret < 0)
+		vpn_conn_down();
 
 	return ERR_OK;
 }
@@ -739,7 +748,7 @@ static struct option longopts[] = {
 
 int main(int argc, char **argv)
 {
-	int opt, dns_count = 0, i;
+	int opt, dns_count = 0, i, vpnfd;
 	char *str;
 	char *ip_str, *netmask_str, *gw_str, *dns_str;
 	ip_addr_t ip, netmask, gw, dns;
@@ -758,8 +767,8 @@ int main(int argc, char **argv)
 	str = getenv("VPNFD");
 	if (!str)
 		die("VPNFD is not set, aborting\n");
-	s = ocp_sock_new(ocp_atoi(str), lwip_data_cb,
-			 FL_ACTIVATE | FL_DIE_ON_ERROR);
+	vpnfd = ocp_atoi(str);
+	s = ocp_sock_new(vpnfd, lwip_data_cb, FL_ACTIVATE | FL_DIE_ON_ERROR);
 
 	/* try to set the IP configuration from the environment, first */
 	ip_str = getenv("INTERNAL_IP4_ADDRESS");
@@ -870,6 +879,13 @@ int main(int argc, char **argv)
 		if (dns_count++ == 4) {
 			dns_count = 0;
 			dns_tmr();
+
+			/*
+			 * This should be ignored by the other side, but it
+			 * indicates whether the peer has died.
+			 */
+			if (write(vpnfd, &vpnfd, 0) < 0)
+				vpn_conn_down();
 		}
 	}
 }
