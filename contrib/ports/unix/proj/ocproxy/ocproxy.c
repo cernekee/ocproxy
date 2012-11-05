@@ -166,6 +166,7 @@ unsigned char debug_flags = 0;
 
 static int allow_remote;
 static int tcpdump_enabled;
+static int keep_intvl;
 
 static void start_connection(const char *hostname, ip_addr_t *ipaddr, void *arg);
 static void start_resolution(struct ocp_sock *s, const char *hostname);
@@ -516,6 +517,13 @@ static void start_connection(const char *hostname, ip_addr_t *ipaddr, void *arg)
 	tcp_recv(tpcb, NULL);
 	tcp_err(tpcb, tcp_err_cb);
 	s->tpcb = tpcb;
+
+	if (keep_intvl) {
+		tpcb->so_options |= SOF_KEEPALIVE;
+		tpcb->keep_intvl = keep_intvl * 1000;
+		tpcb->keep_idle = tpcb->keep_intvl;
+	}
+
 	err = tcp_connect(tpcb, ipaddr, s->rport, connect_cb);
 	if (err != ERR_OK)
 		warn("%s: tcp_connect() returned %d\n", __func__, (int)err);
@@ -719,6 +727,7 @@ static struct option longopts[] = {
 	{ "dns",		1,	NULL,	'd' },
 	{ "localfw",		1,	NULL,	'L' },
 	{ "dynfw",		1,	NULL,	'D' },
+	{ "keepalive",		1,	NULL,	'k' },
 	{ "allow-remote",	0,	NULL,	'g' },
 	{ "verbose",		0,	NULL,	'v' },
 	{ "tcpdump",		0,	NULL,	'T' },
@@ -766,7 +775,7 @@ int main(int argc, char **argv)
 
 	/* override with command line options */
 	while ((opt = getopt_long(argc, argv,
-				  "I:N:G:d:D:gL:vT", longopts, NULL)) != -1) {
+				  "I:N:G:d:D:k:gL:vT", longopts, NULL)) != -1) {
 		switch (opt) {
 		case 'I':
 			ip_str = optarg;
@@ -782,6 +791,9 @@ int main(int argc, char **argv)
 			break;
 		case 'D':
 			socks_port = ocp_atoi(optarg);
+			break;
+		case 'k':
+			keep_intvl = ocp_atoi(optarg);
 			break;
 		case 'g':
 			allow_remote = 1;
