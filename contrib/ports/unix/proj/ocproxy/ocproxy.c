@@ -588,7 +588,7 @@ out:
 static void vpn_conn_down(void)
 {
 	printf("ocproxy: VPN connection has terminated\n");
-	exit(0);
+	event_base_loopbreak(event_base);
 }
 
 /* Called when the VPN sends us a raw IP packet destined for lwIP */
@@ -657,6 +657,45 @@ static err_t lwip_data_out(struct netif *netif, struct pbuf *p, ip_addr_t *ipadd
 		vpn_conn_down();
 
 	return ERR_OK;
+}
+
+/**********************************************************************
+ * Periodic tasks
+ **********************************************************************/
+
+static void new_periodic_event(event_callback_fn cb, void *arg, int timeout_ms)
+{
+	struct timeval tv;
+	struct event *ev;
+
+	tv.tv_sec = timeout_ms / 1000;
+	tv.tv_usec = 1000 * (timeout_ms % 1000);
+	ev = event_new(event_base, -1, EV_PERSIST, cb, arg);
+	if (!ev)
+		die("can't create new periodic event\n");
+	evtimer_add(ev, &tv);
+}
+
+static void cb_tcp_tmr(evutil_socket_t fd, short what, void *ctx)
+{
+	tcp_tmr();
+}
+
+static void cb_dns_tmr(evutil_socket_t fd, short what, void *ctx)
+{
+	dns_tmr();
+}
+
+static void cb_vpn_ping(evutil_socket_t fd, short what, void *ctx)
+{
+	int *vpnfd = ctx;
+
+	/*
+	 * OpenConnect will ignore 0-byte datagrams if it's alive, but
+	 * we'll get ECONNREFUSED if the peer has died.
+	 */
+	if (write(*vpnfd, vpnfd, 0) < 0)
+		vpn_conn_down();
 }
 
 /**********************************************************************
@@ -749,7 +788,7 @@ static struct option longopts[] = {
 
 int main(int argc, char **argv)
 {
-	int opt, dns_count = 0, i, vpnfd;
+	int opt, i, vpnfd;
 	char *str;
 	char *ip_str, *netmask_str, *gw_str, *mtu_str, *dns_str;
 	ip_addr_t ip, netmask, gw, dns;
@@ -875,23 +914,11 @@ int main(int argc, char **argv)
 	if (tcpdump_enabled)
 		tcpdump_init();
 
-	while (1) {
-		const struct timeval tv = { 0, 250000 };
-		event_base_loopexit(event_base, &tv);
-		event_base_dispatch(event_base);
-		tcp_tmr();
+	new_periodic_event(cb_tcp_tmr, NULL, 250);
+	new_periodic_event(cb_dns_tmr, NULL, 1000);
+	new_periodic_event(cb_vpn_ping, &vpnfd, 1000);
 
-		/* tcp_tmr() fires every 250ms; dns_tmr() fires every second */
-		if (dns_count++ == 4) {
-			dns_count = 0;
-			dns_tmr();
+	event_base_dispatch(event_base);
 
-			/*
-			 * This should be ignored by the other side, but it
-			 * indicates whether the peer has died.
-			 */
-			if (write(vpnfd, &vpnfd, 0) < 0)
-				vpn_conn_down();
-		}
-	}
+	return 0;
 }
