@@ -45,6 +45,7 @@
 #include <sys/time.h>
 
 #include <event2/event.h>
+#include <event2/listener.h>
 
 #include "lwip/opt.h"
 #include "lwip/debug.h"
@@ -100,6 +101,7 @@
 struct ocp_sock {
 	/* general */
 	int fd;
+	struct evconnlistener *listener;
 	struct event *ev;
 	struct tcp_pcb *tpcb;
 	int state;
@@ -226,6 +228,9 @@ static struct ocp_sock *ocp_sock_new(int fd, event_callback_fn cb, int flags)
 	}
 	ocp_sock_free_list = s->next;
 	memset(s, 0, sizeof(*s));
+
+	if (fd < 0)
+		return s;
 
 	s->fd = fd;
 	s->ev = event_new(event_base, fd, EV_READ, cb, s);
@@ -548,37 +553,28 @@ static void start_resolution(struct ocp_sock *s, const char *hostname)
 }
 
 /* Called upon connection to a local TCP socket */
-static void new_conn_cb(evutil_socket_t fd, short what, void *ctx)
+static void new_conn_cb(struct evconnlistener *listener, evutil_socket_t fd,
+			struct sockaddr *address, int socklen, void *ctx)
 {
-	struct ocp_sock *lsock = ctx;
-	int newfd;
+	struct ocp_sock *lsock = ctx, *s;
 
-	newfd = accept(lsock->fd, NULL, NULL);
-	if (newfd >= 0) {
-		struct ocp_sock *s;
+	s = ocp_sock_new(fd, lsock->conn_type == CONN_TYPE_REDIR ?
+			 local_data_cb : socks_cmd_cb, 0);
+	if (!s) {
+		warn("too many connections\n");
+		return;
+	}
 
-		s = ocp_sock_new(newfd, lsock->conn_type == CONN_TYPE_REDIR ?
-				 local_data_cb : socks_cmd_cb, 0);
-		if (!s) {
-			warn("too many connections\n");
-			goto out;
-		}
+	s->conn_type = lsock->conn_type;
+	s->rport = lsock->rport;
 
-		s->conn_type = lsock->conn_type;
+	if (s->conn_type == CONN_TYPE_REDIR) {
 		s->rport = lsock->rport;
-
-		if (s->conn_type == CONN_TYPE_REDIR) {
-			s->rport = lsock->rport;
-			start_resolution(s, lsock->rhost_name);
-		} else {
-			s->state = STATE_SOCKS_AUTH;
-			event_add(s->ev, NULL);
-		}
-	} else
-		warn("error accepting new connection\n");
-
-out:
-	event_add(lsock->ev, NULL);
+		start_resolution(s, lsock->rhost_name);
+	} else {
+		s->state = STATE_SOCKS_AUTH;
+		event_add(s->ev, NULL);
+	}
 }
 
 /**********************************************************************
@@ -710,34 +706,23 @@ static err_t init_oc_netif(struct netif *netif)
 	return ERR_OK;
 }
 
-static struct ocp_sock *new_listener(int port, event_callback_fn cb)
+static struct ocp_sock *new_listener(int port, evconnlistener_cb cb)
 {
 	struct sockaddr_in sock;
 	struct ocp_sock *s;
-	int err, fd, on = 1;
 
 	memset(&sock, 0, sizeof(sock));
-	fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (fd < 0)
-		die("socket() failed: %s\n", strerror(errno));
-
-	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0)
-		die("setsockopt() failed\n");
-
-	if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0)
-		die("fcntl() failed\n");
-
         sock.sin_family = AF_INET;
         sock.sin_port = htons(port);
         sock.sin_addr.s_addr = htonl(allow_remote ? INADDR_ANY : INADDR_LOOPBACK);
-	err = bind(fd, (struct sockaddr *)&sock, sizeof(sock));
-	if (err < 0)
-		die("bind() failed: %s\n", strerror(errno));
-	err = listen(fd, 8);
-	if (err < 0)
-		die("listen() failed: %s\n", strerror(errno));
 
-	s = ocp_sock_new(fd, cb, FL_ACTIVATE | FL_DIE_ON_ERROR);
+	s = ocp_sock_new(-1, NULL, FL_DIE_ON_ERROR);
+	s->listener = evconnlistener_new_bind(event_base, cb, s,
+		LEV_OPT_CLOSE_ON_FREE|LEV_OPT_REUSEABLE, -1,
+		(struct sockaddr *)&sock, sizeof(sock));
+	if (!s->listener)
+		die("can't set up listener on port %d/tcp\n", port);
+
 	return s;
 }
 
