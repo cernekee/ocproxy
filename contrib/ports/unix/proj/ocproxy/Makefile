@@ -47,7 +47,7 @@ CFLAGS=-g -D$(ARCH) -DIPv4 -DLWIP_DEBUG \
 # -ansi
 # -std=c89
 
-LDLIBS=-lpthread -lutil
+LDLIBS=-lpthread -lutil -levent
 # For Solaris use:
 # LDLIBS=-lpthread -lsocket -lnsl
 
@@ -112,9 +112,9 @@ $(APPLIB): $(APPOBJS)
 $(LWIPLIB): $(LWIPOBJS)
 	$(AR) $(ARFLAGS) $(LWIPLIB) $?
 
-.depend: ocproxy.c tcpfw.c ocif.c $(LWIPFILES) $(APPFILES)
+.depend: ocproxy.c $(LWIPFILES) $(APPFILES)
 	$(CCDEP) $(CFLAGS) -MM $^ > .depend || rm -f .depend
 
-ocproxy: .depend $(LWIPLIB) $(APPLIB) ocproxy.o tcpfw.o ocif.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o ocproxy ocproxy.o tcpfw.o ocif.o $(APPLIB) $(LWIPLIB) $(LDLIBS)
+ocproxy: .depend $(LWIPLIB) $(APPLIB) ocproxy.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o ocproxy ocproxy.o $(APPLIB) $(LWIPLIB) $(LDLIBS)
 

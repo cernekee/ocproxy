@@ -79,9 +79,10 @@ extern unsigned char debug_flags;
 
 #define NO_SYS                     0
 #define LWIP_SOCKET                0
-#define LWIP_NETCONN               1
+#define LWIP_NETCONN               0
 
-#define	LWIP_SO_RCVTIMEO	1
+#define LWIP_SO_RCVTIMEO           1
+#define LWIP_TCP_KEEPALIVE         1
 
 /* ---------- Memory options ---------- */
 /* MEM_ALIGNMENT: should be set to the alignment of the CPU for which

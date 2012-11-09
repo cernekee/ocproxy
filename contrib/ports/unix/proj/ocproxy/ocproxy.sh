@@ -59,9 +59,9 @@ dns=`echo $INTERNAL_IP4_DNS | awk '{print \$1;}'`
 #     --malloc-fill=de --free-fill=ad \
 ./ocproxy \
     -v \
-    -i $INTERNAL_IP4_ADDRESS \
-    -n $INTERNAL_IP4_NETMASK \
-    -g $VPNGATEWAY \
+    -I $INTERNAL_IP4_ADDRESS \
+    -N $INTERNAL_IP4_NETMASK \
+    -G $VPNGATEWAY \
     -d $dns \
     -D 11080 \
     -L 16667:irc-sfbay.us.oracle.com:6667 \
