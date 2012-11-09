@@ -40,7 +40,7 @@ ARCH=unix
 # -Wc++-compat
 CFLAGS=-g -D$(ARCH) -DIPv4 -DLWIP_DEBUG \
 	-DDEFAULT_THREAD_STACKSIZE=65536 -DTCPIP_THREAD_STACKSIZE=65536 \
-	-pedantic -Werror -Wall
+	-pedantic -Werror -Wno-error=address -Wall
 # not used for now but interesting:
 # -Wpacked
 # -Wunreachable-code
