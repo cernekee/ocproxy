@@ -521,6 +521,7 @@ static void start_connection(const char *hostname, ip_addr_t *ipaddr, void *arg)
 	tpcb = tcp_new();
 	if (!tpcb)
 		die("%s: out of memory\n", __func__);
+	tcp_nagle_disable(tpcb);
 	tcp_arg(tpcb, s);
 	tcp_recv(tpcb, NULL);
 	tcp_err(tpcb, tcp_err_cb);
