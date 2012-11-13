@@ -169,6 +169,8 @@ unsigned char debug_flags = 0;
 static int allow_remote;
 static int tcpdump_enabled;
 static int keep_intvl;
+static int got_sighup;
+static int got_sigusr1;
 
 static void start_connection(const char *hostname, ip_addr_t *ipaddr, void *arg);
 static void start_resolution(struct ocp_sock *s, const char *hostname);
@@ -660,6 +662,14 @@ static err_t lwip_data_out(struct netif *netif, struct pbuf *p, ip_addr_t *ipadd
  * Periodic tasks
  **********************************************************************/
 
+static void handle_sig(int sig)
+{
+	if (sig == SIGHUP)
+		got_sighup = 1;
+	else if (sig == SIGUSR1)
+		got_sigusr1 = 1;
+}
+
 static void new_periodic_event(event_callback_fn cb, void *arg, int timeout_ms)
 {
 	struct timeval tv;
@@ -683,7 +693,7 @@ static void cb_dns_tmr(evutil_socket_t fd, short what, void *ctx)
 	dns_tmr();
 }
 
-static void cb_vpn_ping(evutil_socket_t fd, short what, void *ctx)
+static void cb_housekeeping(evutil_socket_t fd, short what, void *ctx)
 {
 	int *vpnfd = ctx;
 
@@ -693,6 +703,14 @@ static void cb_vpn_ping(evutil_socket_t fd, short what, void *ctx)
 	 */
 	if (write(*vpnfd, vpnfd, 0) < 0)
 		vpn_conn_down();
+
+	if (got_sighup)
+		vpn_conn_down();
+
+	if (got_sigusr1) {
+		LINK_STATS_DISPLAY();
+		got_sigusr1 = 0;
+	}
 }
 
 /**********************************************************************
@@ -867,6 +885,8 @@ int main(int argc, char **argv)
 		die("Invalid gateway: '%s'\n", gw_str);
 
 	/* Debugging help. */
+	signal(SIGHUP, handle_sig);
+	signal(SIGUSR1, handle_sig);
 	signal(SIGPIPE, SIG_IGN);
 	setlinebuf(stdout);
 	setlinebuf(stderr);
@@ -902,7 +922,7 @@ int main(int argc, char **argv)
 
 	new_periodic_event(cb_tcp_tmr, NULL, 250);
 	new_periodic_event(cb_dns_tmr, NULL, 1000);
-	new_periodic_event(cb_vpn_ping, &vpnfd, 1000);
+	new_periodic_event(cb_housekeeping, &vpnfd, 1000);
 
 	event_base_dispatch(event_base);
 
