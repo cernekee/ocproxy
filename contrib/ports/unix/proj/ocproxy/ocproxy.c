@@ -470,10 +470,10 @@ static void tcp_err_cb(void *arg, err_t err)
 
 	if (s) {
 		s->tpcb = NULL;
-		if (s->state == STATE_CONNECTING) {
-			if (s->conn_type == CONN_TYPE_SOCKS)
-				socks_reply(s, SOCKS_CONNREFUSED);
-		} else
+		if (s->state == STATE_CONNECTING &&
+		    s->conn_type == CONN_TYPE_SOCKS)
+			socks_reply(s, SOCKS_CONNREFUSED);
+		else
 			ocp_sock_del(s);
 	}
 }
