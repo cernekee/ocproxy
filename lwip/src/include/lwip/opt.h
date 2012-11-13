@@ -1461,7 +1461,7 @@
  * LWIP_STATS_DISPLAY==1: Compile in the statistics output functions.
  */
 #ifndef LWIP_STATS_DISPLAY
-#define LWIP_STATS_DISPLAY              0
+#define LWIP_STATS_DISPLAY              1
 #endif
 
 /**

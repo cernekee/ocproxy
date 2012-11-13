@@ -46,6 +46,7 @@
 #include <sys/uio.h>
 
 #include <event2/event.h>
+#include <event2/listener.h>
 
 #include "lwip/opt.h"
 #include "lwip/debug.h"
@@ -101,6 +102,7 @@
 struct ocp_sock {
 	/* general */
 	int fd;
+	struct evconnlistener *listener;
 	struct event *ev;
 	struct tcp_pcb *tpcb;
 	int state;
@@ -168,6 +170,8 @@ unsigned char debug_flags = 0;
 static int allow_remote;
 static int tcpdump_enabled;
 static int keep_intvl;
+static int got_sighup;
+static int got_sigusr1;
 
 static void start_connection(const char *hostname, ip_addr_t *ipaddr, void *arg);
 static void start_resolution(struct ocp_sock *s, const char *hostname);
@@ -227,6 +231,9 @@ static struct ocp_sock *ocp_sock_new(int fd, event_callback_fn cb, int flags)
 	}
 	ocp_sock_free_list = s->next;
 	memset(s, 0, sizeof(*s));
+
+	if (fd < 0)
+		return s;
 
 	s->fd = fd;
 	s->ev = event_new(event_base, fd, EV_READ, cb, s);
@@ -464,10 +471,10 @@ static void tcp_err_cb(void *arg, err_t err)
 
 	if (s) {
 		s->tpcb = NULL;
-		if (s->state == STATE_CONNECTING) {
-			if (s->conn_type == CONN_TYPE_SOCKS)
-				socks_reply(s, SOCKS_CONNREFUSED);
-		} else
+		if (s->state == STATE_CONNECTING &&
+		    s->conn_type == CONN_TYPE_SOCKS)
+			socks_reply(s, SOCKS_CONNREFUSED);
+		else
 			ocp_sock_del(s);
 	}
 }
@@ -517,6 +524,7 @@ static void start_connection(const char *hostname, ip_addr_t *ipaddr, void *arg)
 	tpcb = tcp_new();
 	if (!tpcb)
 		die("%s: out of memory\n", __func__);
+	tcp_nagle_disable(tpcb);
 	tcp_arg(tpcb, s);
 	tcp_recv(tpcb, NULL);
 	tcp_err(tpcb, tcp_err_cb);
@@ -549,37 +557,28 @@ static void start_resolution(struct ocp_sock *s, const char *hostname)
 }
 
 /* Called upon connection to a local TCP socket */
-static void new_conn_cb(evutil_socket_t fd, short what, void *ctx)
+static void new_conn_cb(struct evconnlistener *listener, evutil_socket_t fd,
+			struct sockaddr *address, int socklen, void *ctx)
 {
-	struct ocp_sock *lsock = ctx;
-	int newfd;
+	struct ocp_sock *lsock = ctx, *s;
 
-	newfd = accept(lsock->fd, NULL, NULL);
-	if (newfd >= 0) {
-		struct ocp_sock *s;
+	s = ocp_sock_new(fd, lsock->conn_type == CONN_TYPE_REDIR ?
+			 local_data_cb : socks_cmd_cb, 0);
+	if (!s) {
+		warn("too many connections\n");
+		return;
+	}
 
-		s = ocp_sock_new(newfd, lsock->conn_type == CONN_TYPE_REDIR ?
-				 local_data_cb : socks_cmd_cb, 0);
-		if (!s) {
-			warn("too many connections\n");
-			goto out;
-		}
+	s->conn_type = lsock->conn_type;
+	s->rport = lsock->rport;
 
-		s->conn_type = lsock->conn_type;
+	if (s->conn_type == CONN_TYPE_REDIR) {
 		s->rport = lsock->rport;
-
-		if (s->conn_type == CONN_TYPE_REDIR) {
-			s->rport = lsock->rport;
-			start_resolution(s, lsock->rhost_name);
-		} else {
-			s->state = STATE_SOCKS_AUTH;
-			event_add(s->ev, NULL);
-		}
-	} else
-		warn("error accepting new connection\n");
-
-out:
-	event_add(lsock->ev, NULL);
+		start_resolution(s, lsock->rhost_name);
+	} else {
+		s->state = STATE_SOCKS_AUTH;
+		event_add(s->ev, NULL);
+	}
 }
 
 /**********************************************************************
@@ -589,7 +588,7 @@ out:
 static void vpn_conn_down(void)
 {
 	printf("ocproxy: VPN connection has terminated\n");
-	exit(0);
+	event_base_loopbreak(event_base);
 }
 
 /* Called when the VPN sends us a raw IP packet destined for lwIP */
@@ -649,15 +648,73 @@ static err_t lwip_data_out(struct netif *netif, struct pbuf *p, ip_addr_t *ipadd
 	}
 
 	ret = writev(s->fd, iov, i);
-	if (ret != total)
+	if (ret < 0) {
+		if (errno == ECONNREFUSED || errno == ENOTCONN)
+			vpn_conn_down();
+		else
+			LINK_STATS_INC(link.drop);
+	} else if (ret != total)
 		LINK_STATS_INC(link.lenerr);
 	else
 		LINK_STATS_INC(link.xmit);
 
-	if (ret < 0)
+	return ERR_OK;
+}
+
+/**********************************************************************
+ * Periodic tasks
+ **********************************************************************/
+
+static void handle_sig(int sig)
+{
+	if (sig == SIGHUP)
+		got_sighup = 1;
+	else if (sig == SIGUSR1)
+		got_sigusr1 = 1;
+}
+
+static void new_periodic_event(event_callback_fn cb, void *arg, int timeout_ms)
+{
+	struct timeval tv;
+	struct event *ev;
+
+	tv.tv_sec = timeout_ms / 1000;
+	tv.tv_usec = 1000 * (timeout_ms % 1000);
+	ev = event_new(event_base, -1, EV_PERSIST, cb, arg);
+	if (!ev)
+		die("can't create new periodic event\n");
+	evtimer_add(ev, &tv);
+}
+
+static void cb_tcp_tmr(evutil_socket_t fd, short what, void *ctx)
+{
+	tcp_tmr();
+}
+
+static void cb_dns_tmr(evutil_socket_t fd, short what, void *ctx)
+{
+	dns_tmr();
+}
+
+static void cb_housekeeping(evutil_socket_t fd, short what, void *ctx)
+{
+	int *vpnfd = ctx;
+
+	/*
+	 * OpenConnect will ignore 0-byte datagrams if it's alive, but
+	 * we'll get ECONNREFUSED if the peer has died.
+	 */
+	if (write(*vpnfd, vpnfd, 0) < 0 &&
+	    (errno == ECONNREFUSED || errno == ENOTCONN))
 		vpn_conn_down();
 
-	return ERR_OK;
+	if (got_sighup)
+		vpn_conn_down();
+
+	if (got_sigusr1) {
+		LINK_STATS_DISPLAY();
+		got_sigusr1 = 0;
+	}
 }
 
 /**********************************************************************
@@ -672,34 +729,23 @@ static err_t init_oc_netif(struct netif *netif)
 	return ERR_OK;
 }
 
-static struct ocp_sock *new_listener(int port, event_callback_fn cb)
+static struct ocp_sock *new_listener(int port, evconnlistener_cb cb)
 {
 	struct sockaddr_in sock;
 	struct ocp_sock *s;
-	int err, fd, on = 1;
 
 	memset(&sock, 0, sizeof(sock));
-	fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (fd < 0)
-		die("socket() failed: %s\n", strerror(errno));
-
-	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0)
-		die("setsockopt() failed\n");
-
-	if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0)
-		die("fcntl() failed\n");
-
         sock.sin_family = AF_INET;
         sock.sin_port = htons(port);
         sock.sin_addr.s_addr = htonl(allow_remote ? INADDR_ANY : INADDR_LOOPBACK);
-	err = bind(fd, (struct sockaddr *)&sock, sizeof(sock));
-	if (err < 0)
-		die("bind() failed: %s\n", strerror(errno));
-	err = listen(fd, 8);
-	if (err < 0)
-		die("listen() failed: %s\n", strerror(errno));
 
-	s = ocp_sock_new(fd, cb, FL_ACTIVATE | FL_DIE_ON_ERROR);
+	s = ocp_sock_new(-1, NULL, FL_DIE_ON_ERROR);
+	s->listener = evconnlistener_new_bind(event_base, cb, s,
+		LEV_OPT_CLOSE_ON_FREE|LEV_OPT_REUSEABLE, -1,
+		(struct sockaddr *)&sock, sizeof(sock));
+	if (!s->listener)
+		die("can't set up listener on port %d/tcp\n", port);
+
 	return s;
 }
 
@@ -750,7 +796,7 @@ static struct option longopts[] = {
 
 int main(int argc, char **argv)
 {
-	int opt, dns_count = 0, i, vpnfd;
+	int opt, i, vpnfd;
 	char *str;
 	char *ip_str, *netmask_str, *gw_str, *mtu_str, *dns_str;
 	ip_addr_t ip, netmask, gw, dns;
@@ -843,6 +889,8 @@ int main(int argc, char **argv)
 		die("Invalid gateway: '%s'\n", gw_str);
 
 	/* Debugging help. */
+	signal(SIGHUP, handle_sig);
+	signal(SIGUSR1, handle_sig);
 	signal(SIGPIPE, SIG_IGN);
 	setlinebuf(stdout);
 	setlinebuf(stderr);
@@ -876,23 +924,11 @@ int main(int argc, char **argv)
 	if (tcpdump_enabled)
 		tcpdump_init();
 
-	while (1) {
-		const struct timeval tv = { 0, 250000 };
-		event_base_loopexit(event_base, &tv);
-		event_base_dispatch(event_base);
-		tcp_tmr();
+	new_periodic_event(cb_tcp_tmr, NULL, 250);
+	new_periodic_event(cb_dns_tmr, NULL, 1000);
+	new_periodic_event(cb_housekeeping, &vpnfd, 1000);
 
-		/* tcp_tmr() fires every 250ms; dns_tmr() fires every second */
-		if (dns_count++ == 4) {
-			dns_count = 0;
-			dns_tmr();
+	event_base_dispatch(event_base);
 
-			/*
-			 * This should be ignored by the other side, but it
-			 * indicates whether the peer has died.
-			 */
-			if (write(vpnfd, &vpnfd, 0) < 0)
-				vpn_conn_down();
-		}
-	}
+	return 0;
 }

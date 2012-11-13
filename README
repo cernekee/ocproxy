@@ -15,7 +15,7 @@ Commonly used options include:
 
 Dependencies:
 
-libevent - *.so library and headers
+libevent >= 2.0 - *.so library and headers
 
 
 Building:
