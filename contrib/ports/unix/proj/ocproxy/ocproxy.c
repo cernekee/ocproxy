@@ -647,13 +647,15 @@ static err_t lwip_data_out(struct netif *netif, struct pbuf *p, ip_addr_t *ipadd
 	}
 
 	ret = writev(s->fd, iov, i);
-	if (ret != total)
+	if (ret < 0) {
+		if (errno == ECONNREFUSED || errno == ENOTCONN)
+			vpn_conn_down();
+		else
+			LINK_STATS_INC(link.drop);
+	} else if (ret != total)
 		LINK_STATS_INC(link.lenerr);
 	else
 		LINK_STATS_INC(link.xmit);
-
-	if (ret < 0)
-		vpn_conn_down();
 
 	return ERR_OK;
 }
@@ -701,7 +703,8 @@ static void cb_housekeeping(evutil_socket_t fd, short what, void *ctx)
 	 * OpenConnect will ignore 0-byte datagrams if it's alive, but
 	 * we'll get ECONNREFUSED if the peer has died.
 	 */
-	if (write(*vpnfd, vpnfd, 0) < 0)
+	if (write(*vpnfd, vpnfd, 0) < 0 &&
+	    (errno == ECONNREFUSED || errno == ENOTCONN))
 		vpn_conn_down();
 
 	if (got_sighup)
