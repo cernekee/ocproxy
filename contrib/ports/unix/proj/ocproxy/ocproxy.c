@@ -347,12 +347,12 @@ static err_t recv_cb(void *ctx, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
 			return ERR_ABRT;
 		}
 		s->done_len += wlen;
+		tcp_recved(tpcb, wlen);
 		if (wlen < try_len)
 			return ERR_WOULDBLOCK;
 	}
 
 	/* if we got here, then the whole pbuf is done */
-	tcp_recved(tpcb, s->done_len);
 	s->done_len = 0;
 	pbuf_free(first);
 
