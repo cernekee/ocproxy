@@ -175,8 +175,9 @@ static int tcpdump_enabled;
 static int keep_intvl;
 static int got_sighup;
 static int got_sigusr1;
+static char *dns_domain;
 
-static void start_connection(const char *hostname, ip_addr_t *ipaddr, void *arg);
+static void start_connection(struct ocp_sock *s, ip_addr_t *ipaddr);
 static void start_resolution(struct ocp_sock *s, const char *hostname);
 
 /**********************************************************************
@@ -435,7 +436,7 @@ static void socks_cmd_cb(evutil_socket_t fd, short what, void *ctx)
 				goto req_more;
 			ip.addr = req->u.ipv4.dst_addr;
 			s->rport = ntohs(req->u.ipv4.dst_port);
-			start_connection(NULL, &ip, s);
+			start_connection(s, &ip);
 			return;
 		} else if (req->atyp == SOCKS_ATYP_DOMAIN) {
 			u8_t *name = req->u.fqdn.fqdn_name;
@@ -500,29 +501,10 @@ static err_t connect_cb(void *arg, struct tcp_pcb *tpcb, err_t err)
 	return ERR_OK;
 }
 
-static void start_connection(const char *hostname, ip_addr_t *ipaddr, void *arg)
+static void start_connection(struct ocp_sock *s, ip_addr_t *ipaddr)
 {
-	struct ocp_sock *s = arg;
 	struct tcp_pcb *tpcb;
 	err_t err;
-
-	/*
-	 * We can't abort the DNS lookup, but we can kill the connection when
-	 * it returns (if needed)
-	 */
-	if (s->state == STATE_DEAD) {
-		ocp_sock_del(s);
-		return;
-	}
-
-	if (ipaddr == NULL) {
-		/* DNS resolution failed */
-		if (s->conn_type == CONN_TYPE_SOCKS)
-			socks_reply(s, SOCKS_HOST_UNREACHABLE);
-		else
-			ocp_sock_del(s);
-		return;
-	}
 
 	s->state = STATE_CONNECTING;
 
@@ -546,19 +528,80 @@ static void start_connection(const char *hostname, ip_addr_t *ipaddr, void *arg)
 		warn("%s: tcp_connect() returned %d\n", __func__, (int)err);
 }
 
-static void start_resolution(struct ocp_sock *s, const char *hostname)
+static void finish_resolution(const char *hostname, ip_addr_t *ipaddr, void *arg)
+{
+	struct ocp_sock *s = arg;
+
+	/*
+	 * We can't abort the DNS lookup, but we can kill the connection when
+	 * it returns (if needed)
+	 */
+	if (s->state == STATE_DEAD) {
+		ocp_sock_del(s);
+		return;
+	}
+
+	if (ipaddr) {
+		/* success */
+		start_connection(s, ipaddr);
+		return;
+	}
+
+	/* DNS resolution failed */
+	if (s->conn_type == CONN_TYPE_SOCKS)
+		socks_reply(s, SOCKS_HOST_UNREACHABLE);
+	else
+		ocp_sock_del(s);
+}
+
+static void enqueue_dns_req(struct ocp_sock *s, const char *hostname,
+			    const char *domain, dns_found_callback found)
 {
 	err_t err;
 
-	s->state = STATE_DNS;
+	if (!domain)
+		err = dns_gethostbyname(hostname, &s->rhost, found, s);
+	else {
+		/* sockbuf is just scratch space */
+		snprintf(s->sockbuf, SOCKBUF_LEN, "%s.%s", hostname, dns_domain);
+		err = dns_gethostbyname(s->sockbuf, &s->rhost, found, s);
+	}
 
-	err = dns_gethostbyname(hostname, &s->rhost, start_connection, s);
 	if (err == ERR_INPROGRESS)
 		return;
 	else if (err == ERR_OK)
-		start_connection(hostname, &s->rhost, s);
+		start_connection(s, &s->rhost);
 	else
 		warn("%s: invalid hostname '%s'\n", __func__, hostname);
+}
+
+static void retry_resolution(const char *hostname, ip_addr_t *ipaddr, void *arg)
+{
+	struct ocp_sock *s = arg;
+
+	/* first attempt at DNS resolution succeeded */
+	if (ipaddr != NULL || !dns_domain) {
+		finish_resolution(hostname, ipaddr, arg);
+		return;
+	}
+
+	/* no dice; try again with <hostname>.<dns_domain> */
+	enqueue_dns_req(s, hostname, dns_domain, finish_resolution);
+}
+
+static void start_resolution(struct ocp_sock *s, const char *hostname)
+{
+	s->state = STATE_DNS;
+
+	/*
+	 * Looking up an unqualified hostname can take a few seconds
+	 * to time out, so just look up the FQDN right away if it's
+	 * obvious.
+	 */
+	if (strchr(hostname, '.'))
+		enqueue_dns_req(s, hostname, NULL, retry_resolution);
+	else
+		enqueue_dns_req(s, hostname, dns_domain, finish_resolution);
 }
 
 /* Called upon connection to a local TCP socket */
@@ -789,6 +832,7 @@ static struct option longopts[] = {
 	{ "gw",			1,	NULL,	'G' },
 	{ "mtu",		1,	NULL,	'M' },
 	{ "dns",		1,	NULL,	'd' },
+	{ "domain",		1,	NULL,	'o' },
 	{ "localfw",		1,	NULL,	'L' },
 	{ "dynfw",		1,	NULL,	'D' },
 	{ "keepalive",		1,	NULL,	'k' },
@@ -829,6 +873,8 @@ int main(int argc, char **argv)
 	netmask_str = getenv("INTERNAL_IP4_NETMASK");
 	gw_str = getenv("VPNGATEWAY");
 	mtu_str = getenv("INTERNAL_IP4_MTU");
+
+	dns_domain = getenv("CISCO_DEF_DOMAIN");
 	str = getenv("INTERNAL_IP4_DNS");
 	if (str) {
 		char *p;
@@ -842,7 +888,7 @@ int main(int argc, char **argv)
 
 	/* override with command line options */
 	while ((opt = getopt_long(argc, argv,
-				  "I:N:G:M:d:D:k:gL:vT", longopts, NULL)) != -1) {
+				  "I:N:G:M:d:o:D:k:gL:vT", longopts, NULL)) != -1) {
 		switch (opt) {
 		case 'I':
 			ip_str = optarg;
@@ -858,6 +904,9 @@ int main(int argc, char **argv)
 			break;
 		case 'd':
 			dns_str = optarg;
+			break;
+		case 'o':
+			dns_domain = optarg;
 			break;
 		case 'D':
 			socks_port = ocp_atoi(optarg);
