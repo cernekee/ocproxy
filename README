@@ -56,4 +56,9 @@ route {
 }
 
 
+FoxyProxy can be used to tunnel Firefox browsing through the SOCKS5 server.
+This will send DNS queries through the VPN connection, and unqualified
+hostnames (e.g. http://intranet/) should work.
+
+
 dme@dme.org, 2012-11-14
