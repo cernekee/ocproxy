@@ -80,7 +80,7 @@ enum {
 #define FL_DIE_ON_ERROR		2
 
 #define MAX_IOVEC		16
-#define MAX_CONN		32
+#define MAX_CONN		128
 
 #define SOCKS_VER		0x05
 
