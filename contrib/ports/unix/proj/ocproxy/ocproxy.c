@@ -709,8 +709,7 @@ static void cb_housekeeping(evutil_socket_t fd, short what, void *ctx)
 	if (write(*vpnfd, vpnfd, 0) < 0 &&
 	    (errno == ECONNREFUSED || errno == ENOTCONN))
 		vpn_conn_down();
-
-	if (got_sighup)
+	else if (got_sighup)
 		vpn_conn_down();
 
 	if (got_sigusr1) {
