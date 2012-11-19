@@ -278,7 +278,7 @@ static void local_data_cb(evutil_socket_t fd, short what, void *ctx)
 	try_len = tcp_sndbuf(s->tpcb);
 	if (try_len > SOCKBUF_LEN)
 		try_len = SOCKBUF_LEN;
-	if (!try_len) {
+	if (!try_len || tcp_sndqueuelen(s->tpcb) > (TCP_SND_QUEUELEN/2)) {
 		s->lwip_blocked = 1;
 		return;
 	}
