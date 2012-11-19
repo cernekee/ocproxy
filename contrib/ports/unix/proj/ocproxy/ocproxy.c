@@ -60,13 +60,16 @@
 #include "lwip/tcp_impl.h"
 #include "netif/tcpdump.h"
 
-#define STATE_NEW		0
-#define STATE_SOCKS_AUTH	1
-#define STATE_SOCKS_CMD		2
-#define STATE_DNS		3
-#define STATE_CONNECTING	4
-#define STATE_DATA		5
-#define STATE_DEAD		6
+enum {
+	STATE_NEW		= 0,
+	STATE_SOCKS_AUTH,
+	STATE_SOCKS_CMD,
+	STATE_DNS,
+	STATE_CONNECTING,
+	STATE_DATA,
+	STATE_DEAD,
+	STATE_MAX
+};
 
 #define CONN_TYPE_REDIR		0
 #define CONN_TYPE_SOCKS		1
