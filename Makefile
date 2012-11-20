@@ -2,7 +2,7 @@ DIR=contrib/ports/unix/proj/ocproxy
 
 .PHONY: all install clean
 all install clean:
-	make -C $(DIR) $@
+	$(MAKE) -C $(DIR) $@
 
 TAG=1.$(shell date --utc "+%Y%m%d%H%M%S")
 
