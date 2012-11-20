@@ -38,7 +38,7 @@ CC=gcc
 ARCH=unix
 # For Solaris remove:
 # -Wc++-compat
-CFLAGS=-g -D$(ARCH) -DIPv4 -DLWIP_DEBUG \
+CFLAGS+=$(CPPFLAGS) -g -D$(ARCH) -DIPv4 -DLWIP_DEBUG \
 	-DDEFAULT_THREAD_STACKSIZE=65536 -DTCPIP_THREAD_STACKSIZE=65536 \
 	-pedantic -Werror -Wno-error=address -Wall
 # not used for now but interesting:
@@ -47,7 +47,7 @@ CFLAGS=-g -D$(ARCH) -DIPv4 -DLWIP_DEBUG \
 # -ansi
 # -std=c89
 
-LDLIBS=-lpthread -lutil -levent
+LDLIBS+=-lpthread -lutil -levent
 # For Solaris use:
 # LDLIBS=-lpthread -lsocket -lnsl
 
@@ -59,7 +59,7 @@ ARFLAGS=rs
 #default assumes it's a dir named lwip at the same level as the contrib module
 LWIPDIR=$(CONTRIBDIR)/../lwip/src
 
-CFLAGS:=$(CFLAGS) \
+CFLAGS+= \
 	-I. -I$(CONTRIBDIR)/apps/httpserver_raw -I$(CONTRIBDIR)/apps/shell \
 	-I$(LWIPDIR)/include -I$(LWIPARCH)/include -I$(LWIPDIR)/include/ipv4 \
 	-I$(LWIPDIR)
