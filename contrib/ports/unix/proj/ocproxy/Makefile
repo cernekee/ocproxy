@@ -118,3 +118,6 @@ $(LWIPLIB): $(LWIPOBJS)
 ocproxy: .depend $(LWIPLIB) $(APPLIB) ocproxy.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o ocproxy ocproxy.o $(APPLIB) $(LWIPLIB) $(LDLIBS)
 
+install: ocproxy
+	install -d $(DESTDIR)/usr/bin
+	install ocproxy $(DESTDIR)/usr/bin
