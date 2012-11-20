@@ -221,7 +221,7 @@ extern unsigned char debug_flags;
 #define UDP_TTL                 255
 
 /* ---------- RAW options ---------- */
-#define LWIP_RAW                1
+#define LWIP_RAW                0
 #define RAW_TTL                 255
 
 /* ---------- Statistics options ---------- */
