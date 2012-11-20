@@ -376,7 +376,8 @@ static void socks_reply(struct ocp_sock *s, int rep)
 		rsp.bnd_addr = htonl(s->tpcb->local_ip.addr);
 		rsp.bnd_port = htons(s->tpcb->local_port);
 	}
-	write(s->fd, &rsp, sizeof(rsp));
+	if (write(s->fd, &rsp, sizeof(rsp)) != sizeof(rsp))
+		rep = -1;
 
 	if (rep != 0)
 		ocp_sock_del(s);
@@ -412,7 +413,8 @@ static void socks_cmd_cb(evutil_socket_t fd, short what, void *ctx)
 			goto req_more;
 
 		/* reply: SOCKS5, no auth needed */
-		write(s->fd, "\x05\x00", 2);
+		if (write(s->fd, "\x05\x00", 2) != 2)
+			goto disconnect;
 
 		s->state = STATE_SOCKS_CMD;
 		s->sock_pos = 0;
@@ -803,6 +805,8 @@ int main(int argc, char **argv)
 	in_port_t socks_port = 0;
 	struct ocp_sock *s;
 	struct netif netif;
+
+	ip_str = netmask_str = gw_str = mtu_str = dns_str = NULL;
 
 	ocp_sock_free_list = &ocp_sock_pool[0];
 	for (i = 1; i < MAX_CONN; i++)
