@@ -52,7 +52,7 @@ CFLAGS+=$(CPPFLAGS) -g -D$(ARCH) -DIPv4 -DLWIP_DEBUG \
 # -ansi
 # -std=c89
 
-LDLIBS+=-lpthread -lutil -levent
+LDLIBS+=-levent
 # For Solaris use:
 # LDLIBS=-lpthread -lsocket -lnsl
 
@@ -65,9 +65,8 @@ ARFLAGS=rs
 LWIPDIR=$(CONTRIBDIR)/../lwip/src
 
 CFLAGS+= \
-	-I. -I$(CONTRIBDIR)/apps/httpserver_raw -I$(CONTRIBDIR)/apps/shell \
-	-I$(LWIPDIR)/include -I$(LWIPARCH)/include -I$(LWIPDIR)/include/ipv4 \
-	-I$(LWIPDIR)
+	-I. -I$(LWIPDIR)/include -I$(LWIPARCH)/include \
+	-I$(LWIPDIR)/include/ipv4 -I$(LWIPDIR)
 
 # COREFILES, CORE4FILES: The minimum set of files needed for lwIP.
 COREFILES=$(LWIPDIR)/core/mem.c $(LWIPDIR)/core/memp.c $(LWIPDIR)/core/netif.c \
@@ -86,17 +85,12 @@ APIFILES=$(LWIPDIR)/api/api_lib.c $(LWIPDIR)/api/api_msg.c $(LWIPDIR)/api/tcpip.
 # ARCHFILES: Architecture specific files.
 ARCHFILES=$(wildcard $(LWIPARCH)/*.c $(LWIPARCH)/netif/list.c $(LWIPARCH)/netif/tcpdump.c)
 
-# APPFILES: Applications.
-APPFILES=$(CONTRIBDIR)/apps/udpecho/udpecho.c $(CONTRIBDIR)/apps/tcpecho/tcpecho.c
-
 # LWIPFILES: All the above.
 LWIPFILES=$(COREFILES) $(CORE4FILES) $(SNMPFILES) $(APIFILES) $(NETIFFILES) $(ARCHFILES)
 LWIPFILESW=$(wildcard $(LWIPFILES))
 LWIPOBJS=$(notdir $(LWIPFILESW:.c=.o))
 
 LWIPLIB=liblwip4.a
-APPLIB=liblwipapps.a
-APPOBJS=$(notdir $(APPFILES:.c=.o))
 
 %.o:
 	$(CC) $(CFLAGS) -c $(<:.o=.c)
@@ -105,23 +99,20 @@ all ipv4 compile: ocproxy
 .PHONY: all
 
 clean:
-	rm -f *.o $(LWIPLIB) $(APPLIB) ocproxy *.s .depend* *.core core
+	rm -f *.o $(LWIPLIB) ocproxy *.s .depend* *.core core
 
 depend dep: .depend
 
 include .depend
 
-$(APPLIB): $(APPOBJS)
-	$(AR) $(ARFLAGS) $(APPLIB) $?
-
 $(LWIPLIB): $(LWIPOBJS)
 	$(AR) $(ARFLAGS) $(LWIPLIB) $?
 
-.depend: ocproxy.c $(LWIPFILES) $(APPFILES)
+.depend: ocproxy.c $(LWIPFILES)
 	$(CCDEP) $(CFLAGS) -MM $^ > .depend || rm -f .depend
 
-ocproxy: .depend $(LWIPLIB) $(APPLIB) ocproxy.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o ocproxy ocproxy.o $(APPLIB) $(LWIPLIB) $(LDLIBS)
+ocproxy: .depend $(LWIPLIB) ocproxy.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o ocproxy ocproxy.o $(LWIPLIB) $(LDLIBS)
 
 .PHONY: install
 install: ocproxy
