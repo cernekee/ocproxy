@@ -33,50 +33,116 @@ command.
 \fBocproxy\fP is a program that provides a SOCKS and port-forwarding
 proxy when used in conjunction with
 .BR openconnect (1).
-.SH OPTIONS
+When using ocproxy, OpenConnect only
+handles network activity that the user specifically asks to proxy, so the VPN
+tunnel no longer "hijacks" all network traffic on the host.
+
+.PP
+\fBocproxy\fP accomplishes this by running a lwIP network stack in userland, so
+the OS kernel is no longer directly handling packets sent to and from the VPN
+connection.
+
+.SH "BASIC USAGE"
+.PP
+\fBocproxy\fP should be invoked directly from OpenConnect or another VPN
+program; a file descriptor number is passed through the \fBVPNFD\fP
+environment variable to tell \fBocproxy\fP how to send and receive
+VPN traffic.  For example:
+
+.RS
+openconnect \-\-script-tun \-\-script "ocproxy -D 11080 -L2222:unix-host:22"
+vpn.example.com
+.RE
+
+.PP
+Commonly used options include:
+
 .TP
-.B \-I, --ip
-Specify the IP address of the proxy.
+\fB-D, \-\-dynfw\fP \fIport\fP
+Start up a SOCKS5 server on TCP port \fIport\fP to dynamically forward
+application-level traffic over the VPN proxy.  This is intended to
+resemble the \fB-D\fP option to \fBssh\fP(1).
+
 .TP
-.B \-N, --netmask
-Specify the netmask of the proxy.
+\fB-L, \-\-localfw\fP \fIport:host:hostport\fP
+Bind to port local TCP port \fIport\fP, and forward incoming connections
+to \fIhost:hostport\fP on the VPN.  \fIhost\fP can be a DNS name or a
+dotted-quad IP address.  If the VPN supplied a default DNS domain name
+or \fB\-\-domain\fP was specified on the command line, unqualified hostnames
+may be used.  This is intended to resemble the \fB-L\fP option to \fBssh\fP(1).
+
 .TP
-.B \-G, --gw
-Specify the IP address of the VPN gateway.
+\fB-g, \-\-allow\-remote\fP
+Local listening sockets opened by the \fB\-\-dynfw\fP and \fB\-\-localfw\fP
+options, by default, will be bound to the loopback interface only (127.0.0.1)
+so they are only available on the local machine.  If \fB\-\-allow\-remote\fP
+is specified, the sockets will be bound to \fBINADDR_ANY\fP (0.0.0.0) instead,
+and other hosts may connect to them.  This is intended to resemble the
+\fB-g\fP option to \fBssh\fP(1).
+
 .TP
-.B \-M, --mtu
-Specify the MTU of the VPN interface.
+\fB-k, \-\-keepalive\fP \fIinterval\fP
+Send a TCP keepalive packet every \fIinterval\fP seconds on each open
+connection, on the VPN side.  This can help avoid idle timeouts, both on
+the VPN gateway and on any stateful firewalls in between the two ends.
+
+.SH "ADVANCED USAGE"
+.PP
+These options may be useful for debugging \fBocproxy\fP or diagnosing problems:
+
 .TP
-.B \-d, --dns
-Specify the IP address of the VPN DNS server.
+\fB\-v, \-\-verbose\fP
+Enable verbose debugging output.
+
 .TP
-.B \-L, --localfw port:host:hostport
-Add a port-forwarding rule. The syntax used is similar to that
-provided by the
-.BR ssh (1)
-.B -L
-option, though a local
-.B bind_address
-is not permitted.
+\fB\-T, \-\-tcpdump\fP
+Write a log of all TCP or UDP packets traversing the VPN to \fI/tmp/tcpdump\fP.
+The format largely mirrors the output of the tcpdump(8) utility.
+
+.PP
+\fBocproxy\fP will normally retrieve IP configuration parameters through
+environment variables provided by OpenConnect.  These options may be used
+to override the autodetected parameters:
+
 .TP
-.B \-D, --dynfw port
-Add a SOCKS server on the specified
-.B port .
+\fB\-I, \-\-ip\fP \fIlocal_ip\fP
+Use \fIlocal_ip\fP for the VPN side IP address.  Example: 192.168.5.20.
+This is normally set through the \fBINTERNAL_IP4_ADDRESS\fP environment
+variable.
+
 .TP
-.B \-k, --keepalive seconds
-Specify the TCP keepalive time for connections made over the VPN.
+\fB\-N, \-\-netmask\fP \fInetmask\fP
+Use \fInetmask\fP for the network mask.  Example: 255.255.255.255.
+This is normally set through the \fBINTERNAL_IP4_NETMASK\fP environment
+variable.
+
 .TP
-.B \-g, --allow-remote
-Allow remote systems to use any SOCKS or port-forwarding ports
-configured. Without this option only local applications may access the
-SOCKS and port-forwarding ports.
+
 .TP
-.B \-v, --verbose
-Turn on verbose output.
+\fB\-G, \-\-gw\fP \fIgateway_ip\fP
+Route non-local traffic through \fIgateway_ip\fP.  Example: 192.168.5.1.
+The gateway setting might not actually be used, as many VPN implementations
+are set up as point-to-point links.  This is normally set through the
+\fBVPNGATEWAY\fP environment variable.
+
 .TP
-.B \-T, --tcpdump
-Enable the LWIP TCP dump facility.
+\fB\-M, \-\-mtu\fP \fImtu_bytes\fP
+Use \fImtu_bytes\fP as the maximum transmit unit on the VPN interface; it
+generally depends on DTLS and UDP packet overhead.  Example: 1300.  This is
+normally set through the \fBINTERNAL_IP4_MTU\fP environment variable.
+
+.TP
+\fB\-d, \-\-dns\fP \fIdns_ip\fP
+Send all VPN side DNS queries to server \fIdns_ip\fP.  Example: 192.168.5.2.
+This is normally set through the \fBINTERNAL_IP4_DNS\fP environment variable.
+
+.TP
+\fB\-o, \-\-domain\fP \fIdomain\fP
+Use \fIdomain\fP as the default DNS domain, for unqualified hostnames.
+This is normally set through the \fBCISCO_DEF_DOMAIN\fP environment variable.
+
 .SH SEE ALSO
 .BR openconnect (1),
-.BR ssh (1),
-.BR http://savannah.nongnu.org/projects/lwip/ .
+.BR ssh (1)
+.PP
+.I http://savannah.nongnu.org/projects/lwip/
