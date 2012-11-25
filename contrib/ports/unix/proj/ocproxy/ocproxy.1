@@ -1,0 +1,82 @@
+.\"                                      Hey, EMACS: -*- nroff -*-
+.\" (C) Copyright 2012 David Edmondson <dme@dme.org>,
+.\"
+.\" First parameter, NAME, should be all caps
+.\" Second parameter, SECTION, should be 1-8, maybe w/ subsection
+.\" other parameters are allowed: see man(7), man(1)
+.TH OCPROXY 1 "November 20, 2012"
+.\" Please adjust this date whenever revising the manpage.
+.\"
+.\" Some roff macros, for reference:
+.\" .nh        disable hyphenation
+.\" .hy        enable hyphenation
+.\" .ad l      left justify
+.\" .ad b      justify to both left and right margins
+.\" .nf        disable filling
+.\" .fi        enable filling
+.\" .br        insert line break
+.\" .sp <n>    insert n+1 empty lines
+.\" for manpage-specific macros, see man(7)
+.SH NAME
+ocproxy \- lwip based proxy for openconnect
+.SH SYNOPSIS
+.B ocproxy
+.RI [ options ]
+.SH DESCRIPTION
+This manual page documents briefly the
+.B ocproxy
+command.
+.PP
+.\" TeX users may be more comfortable with the \fB<whatever>\fP and
+.\" \fI<whatever>\fP escape sequences to invode bold face and italics,
+.\" respectively.
+\fBocproxy\fP is a program that provides a SOCKS and port-forwarding
+proxy when used in conjunction with
+.BR openconnect (1).
+.SH OPTIONS
+.TP
+.B \-I, --ip
+Specify the IP address of the proxy.
+.TP
+.B \-N, --netmask
+Specify the netmask of the proxy.
+.TP
+.B \-G, --gw
+Specify the IP address of the VPN gateway.
+.TP
+.B \-M, --mtu
+Specify the MTU of the VPN interface.
+.TP
+.B \-d, --dns
+Specify the IP address of the VPN DNS server.
+.TP
+.B \-L, --localfw port:host:hostport
+Add a port-forwarding rule. The syntax used is similar to that
+provided by the
+.BR ssh (1)
+.B -L
+option, though a local
+.B bind_address
+is not permitted.
+.TP
+.B \-D, --dynfw port
+Add a SOCKS server on the specified
+.B port .
+.TP
+.B \-k, --keepalive seconds
+Specify the TCP keepalive time for connections made over the VPN.
+.TP
+.B \-g, --allow-remote
+Allow remote systems to use any SOCKS or port-forwarding ports
+configured. Without this option only local applications may access the
+SOCKS and port-forwarding ports.
+.TP
+.B \-v, --verbose
+Turn on verbose output.
+.TP
+.B \-T, --tcpdump
+Enable the LWIP TCP dump facility.
+.SH SEE ALSO
+.BR openconnect (1),
+.BR ssh (1),
+.BR http://savannah.nongnu.org/projects/lwip/ .
