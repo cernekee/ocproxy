@@ -119,6 +119,10 @@ struct ocp_sock {
 	int sock_total;
 	char sockbuf[SOCKBUF_LEN];
 
+	/* for all listeners */
+	int lport;
+	evconnlistener_cb listen_cb;
+
 	/* for port forwarding */
 	char *rhost_name;
 	ip_addr_t rhost;
@@ -166,6 +170,7 @@ static struct event_base *event_base;
 
 static struct ocp_sock ocp_sock_pool[MAX_CONN];
 static struct ocp_sock *ocp_sock_free_list;
+static struct ocp_sock *ocp_sock_bind_list;
 
 /* nonstatic debug cmd option, exported in lwipopts.h */
 unsigned char debug_flags = 0;
@@ -235,6 +240,9 @@ static struct ocp_sock *ocp_sock_new(int fd, event_callback_fn cb, int flags)
 	}
 	ocp_sock_free_list = s->next;
 	memset(s, 0, sizeof(*s));
+
+	s->next = ocp_sock_bind_list;
+	ocp_sock_bind_list = s;
 
 	if (fd < 0)
 		return s;
@@ -776,22 +784,36 @@ static err_t init_oc_netif(struct netif *netif)
 	return ERR_OK;
 }
 
+static void bind_all_listeners(void)
+{
+	struct ocp_sock *s;
+	struct sockaddr_in sock;
+
+	for (s = ocp_sock_bind_list; s; s = s->next) {
+		if (!s->listen_cb)
+			continue;
+
+		memset(&sock, 0, sizeof(sock));
+		sock.sin_family = AF_INET;
+		sock.sin_port = htons(s->lport);
+		sock.sin_addr.s_addr =
+			htonl(allow_remote ? INADDR_ANY : INADDR_LOOPBACK);
+
+		s->listener = evconnlistener_new_bind(event_base, s->listen_cb,
+			s, LEV_OPT_CLOSE_ON_FREE|LEV_OPT_REUSEABLE, -1,
+			(struct sockaddr *)&sock, sizeof(sock));
+		if (!s->listener)
+			die("can't set up listener on port %d/tcp\n", s->lport);
+	}
+}
+
 static struct ocp_sock *new_listener(int port, evconnlistener_cb cb)
 {
-	struct sockaddr_in sock;
 	struct ocp_sock *s;
 
-	memset(&sock, 0, sizeof(sock));
-        sock.sin_family = AF_INET;
-        sock.sin_port = htons(port);
-        sock.sin_addr.s_addr = htonl(allow_remote ? INADDR_ANY : INADDR_LOOPBACK);
-
 	s = ocp_sock_new(-1, NULL, FL_DIE_ON_ERROR);
-	s->listener = evconnlistener_new_bind(event_base, cb, s,
-		LEV_OPT_CLOSE_ON_FREE|LEV_OPT_REUSEABLE, -1,
-		(struct sockaddr *)&sock, sizeof(sock));
-	if (!s->listener)
-		die("can't set up listener on port %d/tcp\n", port);
+	s->lport = port;
+	s->listen_cb = cb;
 
 	return s;
 }
@@ -975,6 +997,9 @@ int main(int argc, char **argv)
 		s = new_listener(socks_port, new_conn_cb);
 		s->conn_type = CONN_TYPE_SOCKS;
 	}
+
+	/* bind after all options have been parsed (especially -g) */
+	bind_all_listeners();
 
 	if (tcpdump_enabled)
 		tcpdump_init();

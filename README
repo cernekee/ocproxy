@@ -8,7 +8,7 @@ Commonly used options include:
   -D port                   Set up a SOCKS5 server on PORT
   -L lport:rhost:rport      Connections to localhost:LPORT will be redirected
                             over the VPN to RHOST:RPORT
-  -g                        Allow non-local clients.  Must be the first option.
+  -g                        Allow non-local clients.
   -k interval               Send TCP keepalive every INTERVAL seconds, to
                             prevent connection timeouts
 
