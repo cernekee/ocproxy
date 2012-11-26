@@ -870,7 +870,6 @@ int main(int argc, char **argv)
 	char *str;
 	char *ip_str, *netmask_str, *gw_str, *mtu_str, *dns_str;
 	ip_addr_t ip, netmask, gw, dns;
-	in_port_t socks_port = 0;
 	struct ocp_sock *s;
 	struct netif netif;
 
@@ -888,7 +887,6 @@ int main(int argc, char **argv)
 	if (!str)
 		die("VPNFD is not set, aborting\n");
 	vpnfd = ocp_atoi(str);
-	s = ocp_sock_new(vpnfd, lwip_data_cb, FL_ACTIVATE | FL_DIE_ON_ERROR);
 
 	/* try to set the IP configuration from the environment, first */
 	ip_str = getenv("INTERNAL_IP4_ADDRESS");
@@ -931,7 +929,8 @@ int main(int argc, char **argv)
 			dns_domain = optarg;
 			break;
 		case 'D':
-			socks_port = ocp_atoi(optarg);
+			s = new_listener(ocp_atoi(optarg), new_conn_cb);
+			s->conn_type = CONN_TYPE_SOCKS;
 			break;
 		case 'k':
 			keep_intvl = ocp_atoi(optarg);
@@ -973,6 +972,7 @@ int main(int argc, char **argv)
 	setlinebuf(stderr);
 
 	/* Set up lwIP interface */
+	s = ocp_sock_new(vpnfd, lwip_data_cb, FL_ACTIVATE | FL_DIE_ON_ERROR);
 	memset(&netif, 0, sizeof(netif));
 	s->netif = &netif;
 
@@ -992,11 +992,6 @@ int main(int argc, char **argv)
 
 	netif_set_default(&netif);
 	netif_set_up(&netif);
-
-	if (socks_port) {
-		s = new_listener(socks_port, new_conn_cb);
-		s->conn_type = CONN_TYPE_SOCKS;
-	}
 
 	/* bind after all options have been parsed (especially -g) */
 	bind_all_listeners();
