@@ -850,8 +850,6 @@ bad:
 
 static struct option longopts[] = {
 	{ "ip",			1,	NULL,	'I' },
-	{ "netmask",		1,	NULL,	'N' },
-	{ "gw",			1,	NULL,	'G' },
 	{ "mtu",		1,	NULL,	'M' },
 	{ "dns",		1,	NULL,	'd' },
 	{ "domain",		1,	NULL,	'o' },
@@ -868,12 +866,12 @@ int main(int argc, char **argv)
 {
 	int opt, i, vpnfd;
 	char *str;
-	char *ip_str, *netmask_str, *gw_str, *mtu_str, *dns_str;
+	char *ip_str, *mtu_str, *dns_str;
 	ip_addr_t ip, netmask, gw, dns;
 	struct ocp_sock *s;
 	struct netif netif;
 
-	ip_str = netmask_str = gw_str = mtu_str = dns_str = NULL;
+	ip_str = mtu_str = dns_str = NULL;
 
 	ocp_sock_free_list = &ocp_sock_pool[0];
 	for (i = 1; i < MAX_CONN; i++)
@@ -890,8 +888,6 @@ int main(int argc, char **argv)
 
 	/* try to set the IP configuration from the environment, first */
 	ip_str = getenv("INTERNAL_IP4_ADDRESS");
-	netmask_str = getenv("INTERNAL_IP4_NETMASK");
-	gw_str = getenv("VPNGATEWAY");
 	mtu_str = getenv("INTERNAL_IP4_MTU");
 
 	dns_domain = getenv("CISCO_DEF_DOMAIN");
@@ -908,16 +904,10 @@ int main(int argc, char **argv)
 
 	/* override with command line options */
 	while ((opt = getopt_long(argc, argv,
-				  "I:N:G:M:d:o:D:k:gL:vT", longopts, NULL)) != -1) {
+				  "I:M:d:o:D:k:gL:vT", longopts, NULL)) != -1) {
 		switch (opt) {
 		case 'I':
 			ip_str = optarg;
-			break;
-		case 'N':
-			netmask_str = optarg;
-			break;
-		case 'G':
-			gw_str = optarg;
 			break;
 		case 'M':
 			mtu_str = optarg;
@@ -954,15 +944,11 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (!ip_str || !netmask_str || !gw_str || !mtu_str)
-		die("missing -I, -N, -G, or -M\n");
+	if (!ip_str || !mtu_str)
+		die("missing -I or -M\n");
 
 	if (!ipaddr_aton(ip_str, &ip))
 		die("Invalid IP address: '%s'\n", ip_str);
-	if (!ipaddr_aton(netmask_str, &netmask))
-		die("Invalid netmask: '%s'\n", netmask_str);
-	if (!ipaddr_aton(gw_str, &gw))
-		die("Invalid gateway: '%s'\n", gw_str);
 
 	/* Debugging help. */
 	signal(SIGHUP, handle_sig);
@@ -986,8 +972,9 @@ int main(int argc, char **argv)
 		dns_setserver(0, &dns);
 	}
 
-	netif_add(&netif, &ip, &netmask, &gw, s, init_oc_netif,
-		  ip_input);
+	ip_addr_set_zero(&netmask);
+	ip_addr_set_zero(&gw);
+	netif_add(&netif, &ip, &netmask, &gw, s, init_oc_netif, ip_input);
 	netif.mtu = ocp_atoi(mtu_str);
 
 	netif_set_default(&netif);

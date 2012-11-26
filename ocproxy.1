@@ -111,21 +111,6 @@ This is normally set through the \fBINTERNAL_IP4_ADDRESS\fP environment
 variable.
 
 .TP
-\fB\-N, \-\-netmask\fP \fInetmask\fP
-Use \fInetmask\fP for the network mask.  Example: 255.255.255.255.
-This is normally set through the \fBINTERNAL_IP4_NETMASK\fP environment
-variable.
-
-.TP
-
-.TP
-\fB\-G, \-\-gw\fP \fIgateway_ip\fP
-Route non-local traffic through \fIgateway_ip\fP.  Example: 192.168.5.1.
-The gateway setting might not actually be used, as many VPN implementations
-are set up as point-to-point links.  This is normally set through the
-\fBVPNGATEWAY\fP environment variable.
-
-.TP
 \fB\-M, \-\-mtu\fP \fImtu_bytes\fP
 Use \fImtu_bytes\fP as the maximum transmit unit on the VPN interface; it
 generally depends on DTLS and UDP packet overhead.  Example: 1300.  This is
