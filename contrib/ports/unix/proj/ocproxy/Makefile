@@ -30,6 +30,11 @@
 # Derived from simhost/Makefile.
 # 
 
+PREFIX=/usr
+BINDIR=$(PREFIX)/bin
+DATAROOTDIR=$(PREFIX)/share
+MANDIR=$(DATAROOTDIR)/man
+
 CCDEP=gcc
 CC=gcc
 
@@ -118,6 +123,9 @@ $(LWIPLIB): $(LWIPOBJS)
 ocproxy: .depend $(LWIPLIB) $(APPLIB) ocproxy.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o ocproxy ocproxy.o $(APPLIB) $(LWIPLIB) $(LDLIBS)
 
+.PHONY: install
 install: ocproxy
-	install -d $(DESTDIR)/usr/bin
-	install ocproxy $(DESTDIR)/usr/bin
+	install -d $(DESTDIR)$(BINDIR)
+	install ocproxy $(DESTDIR)$(BINDIR)
+	install -d $(DESTDIR)$(MANDIR)/man1
+	install -m 0644 ocproxy.1 $(DESTDIR)$(MANDIR)/man1
