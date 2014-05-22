@@ -52,7 +52,7 @@ CFLAGS+=$(CPPFLAGS) -g -D$(ARCH) -DIPv4 -DLWIP_DEBUG \
 # -ansi
 # -std=c89
 
-LDLIBS+=-levent
+LDLIBS+=-levent -lpthread
 # For Solaris use:
 # LDLIBS=-lpthread -lsocket -lnsl
 
