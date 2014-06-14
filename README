@@ -20,7 +20,8 @@ libevent >= 2.0 - *.so library and headers
 
 Building:
 
-cd contrib/ports/unix/proj/ocproxy
+./autogen.sh                # if building from git
+./configure
 make
 
 

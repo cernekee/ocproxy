@@ -1,11 +1,32 @@
+# autotools stuff
+Makefile
+Makefile.in
+aclocal.m4
+compile
+config.h
+config.h.in
+config.log
+config.status
+configure
+depcomp
+install-sh
+missing
+.deps/
+.dirstamp
+stamp-h1
+autom4te.cache/
+config.guess
+config.sub
+m4/
+
+# objects
 *.o
-*~
+ocproxy
+ocproxy*.tar.gz
+ocproxy*.tar.gz.asc
 /TAGS
-/contrib/ports/unix/proj/ocproxy/.depend
-/contrib/ports/unix/proj/ocproxy/liblwip4.a
-/contrib/ports/unix/proj/ocproxy/liblwipapps.a
-/contrib/ports/unix/proj/ocproxy/ocproxy
-/contrib/ports/unix/proj/unixsim/.depend
-/contrib/ports/unix/proj/unixsim/liblwip4.a
-/contrib/ports/unix/proj/unixsim/liblwipapps.a
-/contrib/ports/unix/proj/unixsim/ocfw
+/tags
+
+# scratch files
+.*.sw*
+*~
