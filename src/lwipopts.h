@@ -229,7 +229,8 @@ extern unsigned char debug_flags;
  * (e.g #define TCP_STATS 0). All of them are turned off if LWIP_STATS
  * is 0
  * */
-#define LWIP_STATS	1
+#define LWIP_STATS              1
+#define LWIP_STATS_DISPLAY      1
 
 /* Include DNS support. */
 #define LWIP_DNS	1
