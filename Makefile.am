@@ -107,3 +107,20 @@ dist_noinst_SCRIPTS	= autogen.sh
 
 EXTRA_DIST		= .gitignore
 DISTCLEANFILES		= *~
+
+LWIP_GIT		= git://git.savannah.nongnu.org/lwip.git
+LWIP_GIT_TAG		= master
+LWIP_CONTRIB_GIT	= git://git.savannah.nongnu.org/lwip/lwip-contrib.git
+LWIP_CONTRIB_GIT_TAG	= master
+
+.PHONY: update-lwip
+update-lwip:
+	rm -rf lwip contrib
+	git clone --depth 1 $(LWIP_GIT) lwip
+	cd lwip && git checkout $(LWIP_GIT_TAG) && \
+		git rev-parse HEAD > VERSION
+	rm -rf lwip/.git
+	git clone --depth 1 $(LWIP_CONTRIB_GIT) contrib
+	cd contrib && git checkout $(LWIP_CONTRIB_GIT_TAG) && \
+		git rev-parse HEAD > VERSION
+	rm -rf contrib/.git
