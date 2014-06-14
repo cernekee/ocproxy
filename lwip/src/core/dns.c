@@ -887,7 +887,7 @@ dns_enqueue(const char *name, size_t hostnamelen, dns_found_callback found,
 
     /* check if this is the oldest completed entry */
     if (pEntry->state == DNS_STATE_DONE) {
-      if ((dns_seqno - pEntry->seqno) > lseq) {
+      if ((u8_t)(dns_seqno - pEntry->seqno) > lseq) {
         lseq = dns_seqno - pEntry->seqno;
         lseqi = i;
       }
