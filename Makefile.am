@@ -5,7 +5,7 @@ AM_CFLAGS		= -Dunix -DIPv4 -DLWIP_DEBUG \
 			  -I$(srcdir)/lwip/src/include \
 			  -I$(srcdir)/lwip/src/include/ipv4 \
 			  -I$(srcdir)/contrib/ports/unix/include \
-			  -I$(srcdir)/contrib/ports/unix/proj/ocproxy \
+			  -I$(srcdir)/src \
 			  -DDEFAULT_THREAD_STACKSIZE=65536 -DTCPIP_THREAD_STACKSIZE=65536
 
 LWIP_SOURCES		:= \
@@ -96,14 +96,12 @@ LWIP_SOURCES		:= \
 			   contrib/ports/unix/netif/list.c \
 			   contrib/ports/unix/netif/tcpdump.c
 
-APP_SOURCES		:= \
-			   contrib/ports/unix/proj/ocproxy/ocproxy.c \
-			   contrib/ports/unix/proj/ocproxy/lwipopts.h
+APP_SOURCES		:= src/ocproxy.c src/lwipopts.h
 
 bin_PROGRAMS		= ocproxy
 ocproxy_SOURCES		= $(LWIP_SOURCES) $(APP_SOURCES)
 
-dist_man_MANS		= contrib/ports/unix/proj/ocproxy/ocproxy.1
+dist_man_MANS		= ocproxy.1
 dist_doc_DATA		= README
 dist_noinst_SCRIPTS	= autogen.sh
 
