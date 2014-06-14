@@ -1,6 +1,6 @@
 AUTOMAKE_OPTIONS	= foreign subdir-objects
 
-AM_CFLAGS		= -Dunix -DIPv4 -DLWIP_DEBUG \
+AM_CFLAGS		= -Dunix -DIPv4 \
 			  -I$(srcdir)/lwip/src \
 			  -I$(srcdir)/lwip/src/include \
 			  -I$(srcdir)/lwip/src/include/ipv4 \
