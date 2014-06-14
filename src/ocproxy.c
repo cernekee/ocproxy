@@ -773,6 +773,7 @@ static void cb_housekeeping(evutil_socket_t fd, short what, void *ctx)
 
 	if (got_sigusr1) {
 		LINK_STATS_DISPLAY();
+		MEM_STATS_DISPLAY();
 		got_sigusr1 = 0;
 	}
 }
