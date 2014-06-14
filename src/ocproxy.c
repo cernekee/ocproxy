@@ -579,8 +579,13 @@ static void enqueue_dns_req(struct ocp_sock *s, const char *hostname,
 		return;
 	else if (err == ERR_OK)
 		start_connection(s, &s->rhost);
-	else
+	else if (err == ERR_MEM) {
+		warn("%s: DNS table full, aborting lookup\n", __func__);
+		found(hostname, NULL, s);
+	} else {
 		warn("%s: invalid hostname '%s'\n", __func__, hostname);
+		found(hostname, NULL, s);
+	}
 }
 
 static void retry_resolution(const char *hostname, ip_addr_t *ipaddr, void *arg)
