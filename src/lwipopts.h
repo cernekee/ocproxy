@@ -236,6 +236,7 @@ extern unsigned char debug_flags;
 
 /* Include DNS support. */
 #define LWIP_DNS                1
+#define DNS_TABLE_SIZE          128
 
 /* ---------- PPP options ---------- */
 #define PPP_SUPPORT             0
