@@ -6,8 +6,7 @@ AM_CFLAGS		= -Dunix -DIPv4 -DLWIP_DEBUG \
 			  -I$(srcdir)/lwip/src/include/ipv4 \
 			  -I$(srcdir)/lwip/src/include/ipv6 \
 			  -I$(srcdir)/contrib/ports/unix/include \
-			  -I$(srcdir)/src \
-			  -DDEFAULT_THREAD_STACKSIZE=65536 -DTCPIP_THREAD_STACKSIZE=65536
+			  -I$(srcdir)/src
 
 LWIP_SOURCES		:= \
 			   lwip/src/include/lwip/api.h \
