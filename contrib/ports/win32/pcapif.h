@@ -1,5 +1,9 @@
-#ifndef __PKTIF_H__
-#define __PKTIF_H__
+#ifndef LWIP_PCAPIF_H
+#define LWIP_PCAPIF_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "lwip/err.h"
 
@@ -21,4 +25,8 @@ void  pcapif_shutdown(struct netif *netif);
 void  pcapif_poll    (struct netif *netif);
 #endif /* !PCAPIF_RX_USE_THREAD */
 
+#ifdef __cplusplus
+}
 #endif
+
+#endif /* LWIP_PCAPIF_H */

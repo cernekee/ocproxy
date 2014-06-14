@@ -35,8 +35,8 @@
  * Author: Adam Dunkels <adam@sics.se>
  *
  */
-#ifndef __LWIPOPTS_H__
-#define __LWIPOPTS_H__
+#ifndef LWIP_LWIPOPTS_H
+#define LWIP_LWIPOPTS_H
 
 /*
  * Include user defined options first. Anything not defined in these files
@@ -416,6 +416,4 @@
 
 /* Misc */
 
-#define LWIP_TIMEVAL_PRIVATE 0
-
-#endif /* __LWIPOPTS_H__ */
+#endif /* LWIP_LWIPOPTS_H */

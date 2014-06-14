@@ -1,5 +1,5 @@
-#ifndef _TIMER_H_
-#define _TIMER_H_
+#ifndef LWIP_TIMER_H_
+#define LWIP_TIMER_H_
 
 #define TIMER_EVT_ETHARPTMR 0
 #define TIMER_EVT_TCPTMR 1

@@ -29,8 +29,8 @@
  * Author: Adam Dunkels <adam@sics.se>
  *
  */
-#ifndef __ARCH_SYS_ARCH_H__
-#define __ARCH_SYS_ARCH_H__
+#ifndef LWIP_ARCH_SYS_ARCH_H
+#define LWIP_ARCH_SYS_ARCH_H
 
 #include <errno.h>
 
@@ -49,16 +49,11 @@ typedef struct sys_sem * sys_sem_t;
 
 struct sys_mbox;
 typedef struct sys_mbox *sys_mbox_t;
-
-static inline int sys_mbox_valid(sys_mbox_t *mbox)
-{
-	return ((mbox) != NULL) && (*(mbox) != NULL);
-}
-
+#define sys_mbox_valid(mbox) (((mbox) != NULL) && (*(mbox) != NULL))
 #define sys_mbox_set_invalid(mbox) do { if((mbox) != NULL) { *(mbox) = NULL; }}while(0)
 
 struct sys_thread;
 typedef struct sys_thread * sys_thread_t;
 
-#endif /* __ARCH_SYS_ARCH_H__ */
+#endif /* LWIP_ARCH_SYS_ARCH_H */
 

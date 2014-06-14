@@ -29,12 +29,12 @@
  * Author: Adam Dunkels <adam@sics.se>
  *
  */
-#ifndef __NETIF_TCPDUMP_H__
-#define __NETIF_TCPDUMP_H__
+#ifndef LWIP_NETIF_TCPDUMP_H
+#define LWIP_NETIF_TCPDUMP_H
 
 #include "lwip/pbuf.h"
 
 void tcpdump_init(void);
 void tcpdump(struct pbuf *p);
 
-#endif /* __NETIF_TCPDUMP_H__ */
+#endif /* LWIP_NETIF_TCPDUMP_H */

@@ -29,8 +29,8 @@
  * Author: Adam Dunkels <adam@sics.se>
  *
  */
-#ifndef __DROPIF_H__
-#define __DROPIF_H__
+#ifndef LWIP_DROPIF_H
+#define LWIP_DROPIF_H
 
 #include "lwip/netif.h"
 
@@ -38,4 +38,4 @@
 
 err_t dropif_init(struct netif *netif);
 
-#endif /* __DROPIF_H__ */
+#endif /* LWIP_DROPIF_H */

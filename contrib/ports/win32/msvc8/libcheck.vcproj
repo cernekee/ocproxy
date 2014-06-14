@@ -40,7 +40,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="0"
 				AdditionalIncludeDirectories="..\check;..\..\..\..\check\src"
-				PreprocessorDefinitions="HAVE_CONFIG_H"
+				PreprocessorDefinitions="_LIB;WIN32;_DEBUG;HAVE_CONFIG_H"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="1"
@@ -103,8 +103,8 @@
 				Optimization="2"
 				EnableIntrinsicFunctions="true"
 				AdditionalIncludeDirectories="..\check;..\..\..\..\check\src"
-				PreprocessorDefinitions="HAVE_CONFIG_H"
-				RuntimeLibrary="2"
+				PreprocessorDefinitions="WIN32;NDEBUG;_LIB;HAVE_CONFIG_H"
+				RuntimeLibrary="0"
 				EnableFunctionLevelLinking="true"
 				WarningLevel="3"
 				DebugInformationFormat="3"
@@ -199,13 +199,6 @@
 			<File
 				RelativePath="..\..\..\..\check\src\check_log.c"
 				>
-				<FileConfiguration
-					Name="Debug|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-					/>
-				</FileConfiguration>
 			</File>
 			<File
 				RelativePath="..\..\..\..\check\src\check_log.h"

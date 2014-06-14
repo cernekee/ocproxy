@@ -1,6 +1,6 @@
-#ifndef __NETIO_H__
-#define __NETIO_H__
+#ifndef LWIP_NETIO_H
+#define LWIP_NETIO_H
 
 void netio_init(void);
 
-#endif /* __NETIO_H__ */
+#endif /* LWIP_NETIO_H */

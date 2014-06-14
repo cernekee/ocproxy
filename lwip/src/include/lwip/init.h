@@ -29,8 +29,8 @@
  * Author: Adam Dunkels <adam@sics.se>
  *
  */
-#ifndef __LWIP_INIT_H__
-#define __LWIP_INIT_H__
+#ifndef LWIP_HDR_INIT_H
+#define LWIP_HDR_INIT_H
 
 #include "lwip/opt.h"
 
@@ -43,11 +43,11 @@ extern "C" {
 /** x.X.x: Minor version of the stack */
 #define LWIP_VERSION_MINOR      4U
 /** x.x.X: Revision of the stack */
-#define LWIP_VERSION_REVISION   0U
+#define LWIP_VERSION_REVISION   1U
 /** For release candidates, this is set to 1..254
   * For official releases, this is set to 255 (LWIP_RC_RELEASE)
   * For development versions (CVS), this is set to 0 (LWIP_RC_DEVELOPMENT) */
-#define LWIP_VERSION_RC         255U
+#define LWIP_VERSION_RC         0U
 
 /** LWIP_VERSION_RC is set to LWIP_RC_RELEASE for official releases */
 #define LWIP_RC_RELEASE         255U
@@ -69,4 +69,4 @@ void lwip_init(void);
 }
 #endif
 
-#endif /* __LWIP_INIT_H__ */
+#endif /* LWIP_HDR_INIT_H */

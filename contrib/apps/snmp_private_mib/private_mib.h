@@ -3,8 +3,8 @@
  * Exports Private lwIP MIB 
  */
 
-#ifndef __LWIP_PRIVATE_MIB_H__
-#define __LWIP_PRIVATE_MIB_H__
+#ifndef LWIP_HDR_PRIVATE_MIB_H
+#define LWIP_HDR_PRIVATE_MIB_H
 
 #include "arch/cc.h"
 #include "lwip/opt.h"

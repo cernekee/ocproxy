@@ -56,7 +56,11 @@
 #include "lwip/autoip.h"
 #include "lwip/igmp.h"
 #include "lwip/dns.h"
-
+#include "lwip/nd6.h"
+#include "lwip/ip6_frag.h"
+#include "lwip/mld6.h"
+#include "lwip/sys.h"
+#include "lwip/pbuf.h"
 
 /** The one and only timeout list */
 static struct sys_timeo *next_timeout;
@@ -217,6 +221,54 @@ dns_timer(void *arg)
 }
 #endif /* LWIP_DNS */
 
+#if LWIP_IPV6
+/**
+ * Timer callback function that calls nd6_tmr() and reschedules itself.
+ *
+ * @param arg unused argument
+ */
+static void
+nd6_timer(void *arg)
+{
+  LWIP_UNUSED_ARG(arg);
+  LWIP_DEBUGF(TIMERS_DEBUG, ("tcpip: nd6_tmr()\n"));
+  nd6_tmr();
+  sys_timeout(ND6_TMR_INTERVAL, nd6_timer, NULL);
+}
+
+#if LWIP_IPV6_REASS
+/**
+ * Timer callback function that calls ip6_reass_tmr() and reschedules itself.
+ *
+ * @param arg unused argument
+ */
+static void
+ip6_reass_timer(void *arg)
+{
+  LWIP_UNUSED_ARG(arg);
+  LWIP_DEBUGF(TIMERS_DEBUG, ("tcpip: ip6_reass_tmr()\n"));
+  ip6_reass_tmr();
+  sys_timeout(IP6_REASS_TMR_INTERVAL, ip6_reass_timer, NULL);
+}
+#endif /* LWIP_IPV6_REASS */
+
+#if LWIP_IPV6_MLD
+/**
+ * Timer callback function that calls mld6_tmr() and reschedules itself.
+ *
+ * @param arg unused argument
+ */
+static void
+mld6_timer(void *arg)
+{
+  LWIP_UNUSED_ARG(arg);
+  LWIP_DEBUGF(TIMERS_DEBUG, ("tcpip: mld6_tmr()\n"));
+  mld6_tmr();
+  sys_timeout(MLD6_TMR_INTERVAL, mld6_timer, NULL);
+}
+#endif /* LWIP_IPV6_MLD */
+#endif /* LWIP_IPV6 */
+
 /** Initialize this module */
 void sys_timeouts_init(void)
 {
@@ -239,6 +291,15 @@ void sys_timeouts_init(void)
 #if LWIP_DNS
   sys_timeout(DNS_TMR_INTERVAL, dns_timer, NULL);
 #endif /* LWIP_DNS */
+#if LWIP_IPV6
+  sys_timeout(ND6_TMR_INTERVAL, nd6_timer, NULL);
+#if LWIP_IPV6_REASS
+  sys_timeout(IP6_REASS_TMR_INTERVAL, ip6_reass_timer, NULL);
+#endif /* LWIP_IPV6_REASS */
+#if LWIP_IPV6_MLD
+  sys_timeout(MLD6_TMR_INTERVAL, mld6_timer, NULL);
+#endif /* LWIP_IPV6_MLD */
+#endif /* LWIP_IPV6 */
 
 #if NO_SYS
   /* Initialise timestamp for sys_check_timeouts */
@@ -265,16 +326,34 @@ sys_timeout(u32_t msecs, sys_timeout_handler handler, void *arg)
 #endif /* LWIP_DEBUG_TIMERNAMES */
 {
   struct sys_timeo *timeout, *t;
+#if NO_SYS
+  u32_t now, diff;
+#endif
 
   timeout = (struct sys_timeo *)memp_malloc(MEMP_SYS_TIMEOUT);
   if (timeout == NULL) {
     LWIP_ASSERT("sys_timeout: timeout != NULL, pool MEMP_SYS_TIMEOUT is empty", timeout != NULL);
     return;
   }
+
+#if NO_SYS
+  now = sys_now();
+  if (next_timeout == NULL) {
+    diff = 0;
+    timeouts_last_time = now;
+  } else {
+    diff = now - timeouts_last_time;
+  }
+#endif
+
   timeout->next = NULL;
   timeout->h = handler;
   timeout->arg = arg;
+#if NO_SYS
+  timeout->time = msecs + diff;
+#else
   timeout->time = msecs;
+#endif
 #if LWIP_DEBUG_TIMERNAMES
   timeout->handler_name = handler_name;
   LWIP_DEBUGF(TIMERS_DEBUG, ("sys_timeout: %p msecs=%"U32_F" handler=%s arg=%p\n",
@@ -307,10 +386,8 @@ sys_timeout(u32_t msecs, sys_timeout_handler handler, void *arg)
 
 /**
  * Go through timeout list (for this task only) and remove the first matching
- * entry, even though the timeout has not triggered yet.
- *
- * @note This function only works as expected if there is only one timeout
- * calling 'handler' in the list of timeouts.
+ * entry (subsequent entries remain untouched), even though the timeout has not
+ * triggered yet.
  *
  * @param handler callback function that would be called by the timeout
  * @param arg callback argument that would be passed to handler
@@ -355,25 +432,28 @@ sys_untimeout(sys_timeout_handler handler, void *arg)
 void
 sys_check_timeouts(void)
 {
-  struct sys_timeo *tmptimeout;
-  u32_t diff;
-  sys_timeout_handler handler;
-  void *arg;
-  int had_one;
-  u32_t now;
-
-  now = sys_now();
   if (next_timeout) {
+    struct sys_timeo *tmptimeout;
+    u32_t diff;
+    sys_timeout_handler handler;
+    void *arg;
+    u8_t had_one;
+    u32_t now;
+
+    now = sys_now();
     /* this cares for wraparounds */
-    diff = LWIP_U32_DIFF(now, timeouts_last_time);
+    diff = now - timeouts_last_time;
     do
     {
+#if PBUF_POOL_FREE_OOSEQ
+      PBUF_CHECK_FREE_OOSEQ();
+#endif /* PBUF_POOL_FREE_OOSEQ */
       had_one = 0;
       tmptimeout = next_timeout;
-      if (tmptimeout->time <= diff) {
+      if (tmptimeout && (tmptimeout->time <= diff)) {
         /* timeout has expired */
         had_one = 1;
-        timeouts_last_time = now;
+        timeouts_last_time += tmptimeout->time;
         diff -= tmptimeout->time;
         next_timeout = tmptimeout->next;
         handler = tmptimeout->h;

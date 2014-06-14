@@ -81,26 +81,47 @@
 
 #if PPP_SUPPORT
 /* PPP includes */
-#include "../netif/ppp/ppp.h"
-#include "../netif/ppp/lcp.h"
+#include "../netif/ppp/ppp_impl.h"
 #include "lwip/sio.h"
 #include "netif/ppp_oe.h"
 #endif /* PPP_SUPPORT */
 
-#include "pcapif.h"
-
 /* include the port-dependent configuration */
 #include "lwipcfg_msvc.h"
 
-/** Use an ethernet adapter? By default only if PPP is not used. */
-#ifndef USE_ETHERNET
-#define USE_ETHERNET  (!PPP_SUPPORT || PPPOE_SUPPORT)
-#endif
-/** Use an ethernet adapter for TCP/IP? By default only if PPP is not used. */
-#ifndef USE_ETHERNET_TCPIP
-#define USE_ETHERNET_TCPIP  !PPP_SUPPORT
+/** Define this to 1 to enable a PCAP interface as default interface. */
+#ifndef USE_PCAPIF
+#define USE_PCAPIF 1
 #endif
 
+/** Define this to 1 or 2 to support 1 or 2 SLIP interfaces. */
+#ifndef USE_SLIPIF
+#define USE_SLIPIF 0
+#endif
+
+/** Use an ethernet adapter? Default to enabled if PCAPIF or PPPoE are used. */
+#ifndef USE_ETHERNET
+#define USE_ETHERNET  (USE_PCAPIF || PPPOE_SUPPORT)
+#endif
+
+/** Use an ethernet adapter for TCP/IP? By default only if PCAPIF is used. */
+#ifndef USE_ETHERNET_TCPIP
+#define USE_ETHERNET_TCPIP  (USE_PCAPIF)
+#endif
+
+#if USE_ETHERNET
+#include "pcapif.h"
+#endif /* USE_ETHERNET */
+#if USE_SLIPIF
+#include <netif/slipif.h>
+#endif /* USE_SLIPIF */
+
+#ifndef USE_DHCP
+#define USE_DHCP    LWIP_DHCP
+#endif
+#ifndef USE_AUTOIP
+#define USE_AUTOIP  LWIP_AUTOIP
+#endif
 
 /* globales variables for netifs */
 #if USE_ETHERNET
@@ -121,6 +142,12 @@ int ppp_desc = -1;
 u8_t sio_idx = 0;
 sio_fd_t ppp_sio;
 #endif /* PPP_SUPPORT */
+#if USE_SLIPIF
+struct netif slipif1;
+#if USE_SLIPIF > 1
+struct netif slipif2;
+#endif /* USE_SLIPIF > 1 */
+#endif /* USE_SLIPIF */
 
 
 #if PPP_SUPPORT
@@ -131,7 +158,7 @@ pppLinkStatusCallback(void *ctx, int errCode, void *arg)
 
   switch(errCode) {
     case PPPERR_NONE: {             /* No error. */
-      struct ppp_addrs *ppp_addrs = arg;
+      struct ppp_addrs *ppp_addrs = (struct ppp_addrs *)arg;
 
       printf("pppLinkStatusCallback: PPPERR_NONE\n");
       printf(" our_ipaddr=%s\n", ip_ntoa(&ppp_addrs->our_ipaddr));
@@ -197,11 +224,11 @@ void link_callback(struct netif *netif)
 {
   if (netif_is_link_up(netif)) {
     printf("link_callback==UP\n");
-#if LWIP_DHCP
+#if USE_DHCP
     if (netif->dhcp != NULL) {
       dhcp_renew(netif);
     }
-#endif /* LWIP_DHCP */
+#endif /* USE_DHCP */
   } else {
     printf("link_callback==DOWN\n");
   }
@@ -215,6 +242,14 @@ msvc_netif_init()
 #if USE_ETHERNET
   ip_addr_t ipaddr, netmask, gw;
 #endif /* USE_ETHERNET */
+#if USE_SLIPIF
+  u8_t num_slip1 = 0;
+  ip_addr_t ipaddr_slip1, netmask_slip1, gw_slip1;
+#if USE_SLIPIF > 1
+  u8_t num_slip2 = 1;
+  ip_addr_t ipaddr_slip2, netmask_slip2, gw_slip2;
+#endif /* USE_SLIPIF > 1 */
+#endif /* USE_SLIPIF */
 
 #if PPP_SUPPORT
   const char *username = NULL, *password = NULL;
@@ -243,16 +278,16 @@ msvc_netif_init()
   ip_addr_set_zero(&ipaddr);
   ip_addr_set_zero(&netmask);
 #if USE_ETHERNET_TCPIP
-#if LWIP_DHCP
+#if USE_DHCP
   printf("Starting lwIP, local interface IP is dhcp-enabled\n");
-#elif LWIP_AUTOIP
+#elif USE_AUTOIP
   printf("Starting lwIP, local interface IP is autoip-enabled\n");
-#else /* LWIP_AUTOIP */
+#else /* USE_DHCP */
   LWIP_PORT_INIT_GW(&gw);
   LWIP_PORT_INIT_IPADDR(&ipaddr);
   LWIP_PORT_INIT_NETMASK(&netmask);
   printf("Starting lwIP, local interface IP is %s\n", ip_ntoa(&ipaddr));
-#endif /* LWIP_DHCP */
+#endif /* USE_DHCP */
 #endif /* USE_ETHERNET_TCPIP */
 
 #if NO_SYS
@@ -263,6 +298,12 @@ msvc_netif_init()
 #endif /* LWIP_ARP */
 #else  /* NO_SYS */
   netif_set_default(netif_add(&netif, &ipaddr, &netmask, &gw, NULL, pcapif_init, tcpip_input));
+#if LWIP_IPV6
+  netif_create_ip6_linklocal_address(&netif, 1);
+  printf("ip6 linklocal address: ");
+  ip6_addr_debug_print(0xFFFFFFFF & ~LWIP_DBG_HALT, &netif.ip6_addr[0]);
+  printf("\n");
+#endif /* LWIP_IPV6 */
 #endif /* NO_SYS */
 #if LWIP_NETIF_STATUS_CALLBACK
   netif_set_status_callback(&netif, status_callback);
@@ -277,12 +318,14 @@ msvc_netif_init()
 #endif /* LWIP_AUTOIP */
 #if LWIP_DHCP
   dhcp_set_struct(&netif, &netif_dhcp);
-  dhcp_start(&netif);
-#elif LWIP_AUTOIP
-  autoip_start(&netif);
-#else /* LWIP_DHCP */
-  netif_set_up(&netif);
 #endif /* LWIP_DHCP */
+#if USE_DHCP
+  dhcp_start(&netif);
+#elif USE_AUTOIP
+  autoip_start(&netif);
+#else /* USE_DHCP */
+  netif_set_up(&netif);
+#endif /* USE_DHCP */
 #else /* USE_ETHERNET_TCPIP */
   /* Use ethernet for PPPoE only */
   netif.flags &= ~(NETIF_FLAG_ETHARP | NETIF_FLAG_IGMP); /* no ARP */
@@ -295,6 +338,56 @@ msvc_netif_init()
 #endif /* PPP_SUPPORT && PPPOE_SUPPORT */
 
 #endif /* USE_ETHERNET */
+#if USE_SLIPIF
+  LWIP_PORT_INIT_SLIP1_IPADDR(&ipaddr_slip1);
+  LWIP_PORT_INIT_SLIP1_GW(&gw_slip1);
+  LWIP_PORT_INIT_SLIP1_NETMASK(&netmask_slip1);
+  printf("Starting lwIP slipif, local interface IP is %s\n", ip_ntoa(&ipaddr_slip1));
+#if SIO_USE_COMPORT
+  num_slip1++; /* COM ports cannot be 0-based */
+#endif
+  netif_add(&slipif1, &ipaddr_slip1, &netmask_slip1, &gw_slip1, &num_slip1, slipif_init, ip_input);
+#if !USE_ETHERNET
+  netif_set_default(&slipif1);
+#endif /* !USE_ETHERNET */
+#if LWIP_IPV6
+  netif_create_ip6_linklocal_address(&slipif1, 1);
+  printf("SLIP ip6 linklocal address: ");
+  ip6_addr_debug_print(0xFFFFFFFF & ~LWIP_DBG_HALT, &slipif1.ip6_addr[0]);
+  printf("\n");
+#endif /* LWIP_IPV6 */
+#if LWIP_NETIF_STATUS_CALLBACK
+  netif_set_status_callback(&slipif1, status_callback);
+#endif /* LWIP_NETIF_STATUS_CALLBACK */
+#if LWIP_NETIF_LINK_CALLBACK
+  netif_set_link_callback(&slipif1, link_callback);
+#endif /* LWIP_NETIF_LINK_CALLBACK */
+  netif_set_up(&slipif1);
+
+#if USE_SLIPIF > 1
+  LWIP_PORT_INIT_SLIP2_IPADDR(&ipaddr_slip2);
+  LWIP_PORT_INIT_SLIP2_GW(&gw_slip2);
+  LWIP_PORT_INIT_SLIP2_NETMASK(&netmask_slip2);
+  printf("Starting lwIP SLIP if #2, local interface IP is %s\n", ip_ntoa(&ipaddr_slip2));
+#if SIO_USE_COMPORT
+  num_slip2++; /* COM ports cannot be 0-based */
+#endif
+  netif_add(&slipif2, &ipaddr_slip2, &netmask_slip2, &gw_slip2, &num_slip2, slipif_init, ip_input);
+#if LWIP_IPV6
+  netif_create_ip6_linklocal_address(&slipif1, 1);
+  printf("SLIP2 ip6 linklocal address: ");
+  ip6_addr_debug_print(0xFFFFFFFF & ~LWIP_DBG_HALT, &slipif2.ip6_addr[0]);
+  printf("\n");
+#endif /* LWIP_IPV6 */
+#if LWIP_NETIF_STATUS_CALLBACK
+  netif_set_status_callback(&slipif2, status_callback);
+#endif /* LWIP_NETIF_STATUS_CALLBACK */
+#if LWIP_NETIF_LINK_CALLBACK
+  netif_set_link_callback(&slipif2, link_callback);
+#endif /* LWIP_NETIF_LINK_CALLBACK */
+  netif_set_up(&slipif2);
+#endif /* USE_SLIPIF > 1*/
+#endif /* USE_SLIPIF */
 }
 
 #if LWIP_DNS_APP && LWIP_DNS
@@ -373,6 +466,9 @@ apps_init()
 #if LWIP_SOCKET_EXAMPLES_APP && LWIP_SOCKET
   socket_examples_init();
 #endif /* LWIP_SOCKET_EXAMPLES_APP && LWIP_SOCKET */
+#ifdef LWIP_APP_INIT
+  LWIP_APP_INIT();
+#endif
 }
 
 /* This function initializes this lwIP test. When NO_SYS=1, this is done in
@@ -471,10 +567,16 @@ void main_loop()
     }
 
 #endif /* USE_ETHERNET */
-#if !LWIP_NETIF_LOOPBACK_MULTITHREADING
+#if USE_SLIPIF
+    slipif_poll(&slipif1);
+#if USE_SLIPIF > 1
+    slipif_poll(&slipif2);
+#endif /* USE_SLIPIF > 1 */
+#endif /* USE_SLIPIF */
+#if ENABLE_LOOPBACK && !LWIP_NETIF_LOOPBACK_MULTITHREADING
     /* check for loopback packets on all netifs */
     netif_poll_all();
-#endif /* !LWIP_NETIF_LOOPBACK_MULTITHREADING */
+#endif /* ENABLE_LOOPBACK && !LWIP_NETIF_LOOPBACK_MULTITHREADING */
 #if PPP_SUPPORT
     {
     int do_hup = 0;
@@ -511,11 +613,11 @@ void main_loop()
       started = sys_now();
       do
       {
-#if USE_ETHERNET
+#if USE_ETHERNET && !PCAPIF_RX_USE_THREAD
         pcapif_poll(&netif);
-#else /* USE_ETHERNET */
+#else /* USE_ETHERNET && !PCAPIF_RX_USE_THREAD */
         sys_msleep(50);
-#endif /* USE_ETHERNET */
+#endif /* USE_ETHERNET && !PCAPIF_RX_USE_THREAD */
         /* @todo: need a better check here: only wait until PPP is down */
       } while(sys_now() - started < 5000);
     }

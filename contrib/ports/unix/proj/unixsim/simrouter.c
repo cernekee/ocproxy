@@ -91,14 +91,20 @@ tcpip_init_done(void *arg)
   IP4_ADDR(&ipaddr, 192,168,0,2);
   IP4_ADDR(&netmask, 255,255,255,0);
 
-  netif_set_default(netif_add(&netif_tap,&ipaddr, &netmask, &gw, NULL, tapif_init,
-			      tcpip_input));
+  netif_set_default(netif_add(&netif_tap, &ipaddr, &netmask, &gw, NULL, tapif_init,
+                    tcpip_input));
+#if LWIP_IPV6
+  netif_create_ip6_linklocal_address(&netif_tap, 1);
+#endif
 
   IP4_ADDR(&gw, 192,168,1,1);
   IP4_ADDR(&ipaddr, 192,168,1,1);
   IP4_ADDR(&netmask, 255,255,255,0);
-  netif_set_default(netif_add(&netif_unix,&ipaddr, &netmask, &gw, NULL, unixif_init_server,
-			      tcpip_input));
+  netif_set_default(netif_add(&netif_unix, &ipaddr, &netmask, &gw, NULL, unixif_init_server,
+                    tcpip_input));
+#if LWIP_IPV6
+  netif_create_ip6_linklocal_address(&netif_unix, 1);
+#endif
 
   system("route add 192.168.1.1 192.168.0.2");
   system("route add 192.168.1.2 192.168.0.2");

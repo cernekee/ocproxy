@@ -1,5 +1,5 @@
-#ifndef __PING_H__
-#define __PING_H__
+#ifndef LWIP_PING_H
+#define LWIP_PING_H
 
 /**
  * PING_USE_SOCKETS: Set to 1 to use sockets, otherwise the raw api is used
@@ -15,4 +15,4 @@ void ping_init(void);
 void ping_send_now(void);
 #endif /* !PING_USE_SOCKETS */
 
-#endif /* __PING_H__ */
+#endif /* LWIP_PING_H */

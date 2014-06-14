@@ -12,7 +12,7 @@
 #ifndef LWIP_MALLOC_MEMPOOL
 /* This treats "malloc pools" just like any other pool.
    The pools are a little bigger to provide 'size' as the amount of user data. */
-#define LWIP_MALLOC_MEMPOOL(num, size) LWIP_MEMPOOL(POOL_##size, num, (size + sizeof(struct memp_malloc_helper)), "MALLOC_"#size)
+#define LWIP_MALLOC_MEMPOOL(num, size) LWIP_MEMPOOL(POOL_##size, num, (size + LWIP_MEM_ALIGN_SIZE(sizeof(struct memp_malloc_helper))), "MALLOC_"#size)
 #define LWIP_MALLOC_MEMPOOL_START
 #define LWIP_MALLOC_MEMPOOL_END
 #endif /* LWIP_MALLOC_MEMPOOL */ 
@@ -47,7 +47,7 @@ LWIP_MEMPOOL(TCP_SEG,        MEMP_NUM_TCP_SEG,         sizeof(struct tcp_seg),  
 #if IP_REASSEMBLY
 LWIP_MEMPOOL(REASSDATA,      MEMP_NUM_REASSDATA,       sizeof(struct ip_reassdata),   "REASSDATA")
 #endif /* IP_REASSEMBLY */
-#if IP_FRAG && !IP_FRAG_USES_STATIC_BUF && !LWIP_NETIF_TX_SINGLE_PBUF
+#if (IP_FRAG && !IP_FRAG_USES_STATIC_BUF && !LWIP_NETIF_TX_SINGLE_PBUF) || LWIP_IPV6_FRAG
 LWIP_MEMPOOL(FRAG_PBUF,      MEMP_NUM_FRAG_PBUF,       sizeof(struct pbuf_custom_ref),"FRAG_PBUF")
 #endif /* IP_FRAG && !IP_FRAG_USES_STATIC_BUF && !LWIP_NETIF_TX_SINGLE_PBUF */
 
@@ -58,14 +58,26 @@ LWIP_MEMPOOL(NETCONN,        MEMP_NUM_NETCONN,         sizeof(struct netconn),  
 
 #if NO_SYS==0
 LWIP_MEMPOOL(TCPIP_MSG_API,  MEMP_NUM_TCPIP_MSG_API,   sizeof(struct tcpip_msg),      "TCPIP_MSG_API")
+#if LWIP_MPU_COMPATIBLE
+LWIP_MEMPOOL(API_MSG,        MEMP_NUM_API_MSG,         sizeof(struct api_msg),        "API_MSG")
+#if LWIP_DNS
+LWIP_MEMPOOL(DNS_API_MSG,    MEMP_NUM_DNS_API_MSG,     sizeof(struct dns_api_msg),    "DNS_API_MSG")
+#endif
+#if LWIP_SOCKET
+LWIP_MEMPOOL(SOCKET_SETGETSOCKOPT_DATA, MEMP_NUM_SOCKET_SETGETSOCKOPT_DATA, sizeof(struct lwip_setgetsockopt_data), "SOCKET_SETGETSOCKOPT_DATA")
+#endif
+#if LWIP_NETIF_API
+LWIP_MEMPOOL(NETIFAPI_MSG,   MEMP_NUM_NETIFAPI_MSG,    sizeof(struct netifapi_msg),   "NETIFAPI_MSG")
+#endif
+#endif /* LWIP_MPU_COMPATIBLE */
 #if !LWIP_TCPIP_CORE_LOCKING_INPUT
 LWIP_MEMPOOL(TCPIP_MSG_INPKT,MEMP_NUM_TCPIP_MSG_INPKT, sizeof(struct tcpip_msg),      "TCPIP_MSG_INPKT")
 #endif /* !LWIP_TCPIP_CORE_LOCKING_INPUT */
 #endif /* NO_SYS==0 */
 
-#if ARP_QUEUEING
+#if LWIP_ARP && ARP_QUEUEING
 LWIP_MEMPOOL(ARP_QUEUE,      MEMP_NUM_ARP_QUEUE,       sizeof(struct etharp_q_entry), "ARP_QUEUE")
-#endif /* ARP_QUEUEING */
+#endif /* LWIP_ARP && ARP_QUEUEING */
 
 #if LWIP_IGMP
 LWIP_MEMPOOL(IGMP_GROUP,     MEMP_NUM_IGMP_GROUP,      sizeof(struct igmp_group),     "IGMP_GROUP")
@@ -87,9 +99,29 @@ LWIP_MEMPOOL(NETDB,          MEMP_NUM_NETDB,           NETDB_ELEM_SIZE,         
 #if LWIP_DNS && DNS_LOCAL_HOSTLIST && DNS_LOCAL_HOSTLIST_IS_DYNAMIC
 LWIP_MEMPOOL(LOCALHOSTLIST,  MEMP_NUM_LOCALHOSTLIST,   LOCALHOSTLIST_ELEM_SIZE,       "LOCALHOSTLIST")
 #endif /* LWIP_DNS && DNS_LOCAL_HOSTLIST && DNS_LOCAL_HOSTLIST_IS_DYNAMIC */
-#if PPP_SUPPORT && PPPOE_SUPPORT
-LWIP_MEMPOOL(PPPOE_IF,      MEMP_NUM_PPPOE_INTERFACES, sizeof(struct pppoe_softc),    "PPPOE_IF")
-#endif /* PPP_SUPPORT && PPPOE_SUPPORT */
+
+#if PPP_SUPPORT
+LWIP_MEMPOOL(PPP_PCB,       MEMP_NUM_PPP_PCB,              sizeof(ppp_pcb),             "PPP_PCB")
+#if PPPOE_SUPPORT
+LWIP_MEMPOOL(PPPOE_IF,      MEMP_NUM_PPPOE_INTERFACES,     sizeof(struct pppoe_softc),  "PPPOE_IF")
+#endif /* PPPOE_SUPPORT */
+#if PPPOL2TP_SUPPORT
+LWIP_MEMPOOL(PPPOL2TP_PCB,  MEMP_NUM_PPPOL2TP_INTERFACES,  sizeof(pppol2tp_pcb),        "PPPOL2TP_PCB")
+#endif /* PPPOL2TP_SUPPORT */
+#endif /* PPP_SUPPORT */
+
+#if LWIP_IPV6 && LWIP_ND6_QUEUEING
+LWIP_MEMPOOL(ND6_QUEUE,      MEMP_NUM_ND6_QUEUE,       sizeof(struct nd6_q_entry), "ND6_QUEUE")
+#endif /* LWIP_IPV6 && LWIP_ND6_QUEUEING */
+
+#if LWIP_IPV6 && LWIP_IPV6_REASS
+LWIP_MEMPOOL(IP6_REASSDATA,      MEMP_NUM_REASSDATA,       sizeof(struct ip6_reassdata),   "IP6_REASSDATA")
+#endif /* LWIP_IPV6 && LWIP_IPV6_REASS */
+
+#if LWIP_IPV6 && LWIP_IPV6_MLD
+LWIP_MEMPOOL(MLD6_GROUP,     MEMP_NUM_MLD6_GROUP,      sizeof(struct mld_group),     "MLD6_GROUP")
+#endif /* LWIP_IPV6 && LWIP_IPV6_MLD */
+
 
 /*
  * A list of pools of pbuf's used by LWIP.

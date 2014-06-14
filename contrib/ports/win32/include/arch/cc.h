@@ -29,28 +29,14 @@
  * Author: Adam Dunkels <adam@sics.se>
  *
  */
-#ifndef __ARCH_CC_H__
-#define __ARCH_CC_H__
+#ifndef LWIP_ARCH_CC_H
+#define LWIP_ARCH_CC_H
 
-#if 1
-/* Include some files for defining library routines */
 #include <stdio.h> /* printf, fflush, FILE */
 #include <stdlib.h> /* abort */
-#else
-/* Declare fuction prototypes for assert/diag/error - leads to some warnings,
- * but good to test if no includes are missing. */
-int printf(const char *format, ...);
-void abort(void);
-struct _iobuf;
-typedef struct _iobuf FILE;
-int fflush(FILE *stream);
-#endif
-
-
-
-/** @todo fix some warnings: don't use #pragma if compiling with cygwin gcc */
-#ifndef __GNUC__
 #include <limits.h>
+
+#ifdef _MSC_VER
 #pragma warning (disable: 4244) /* disable conversion warning (implicit integer promotion!) */
 #pragma warning (disable: 4127) /* conditional expression is constant */
 #pragma warning (disable: 4996) /* 'strncpy' was declared deprecated */
@@ -78,12 +64,19 @@ typedef u32_t sys_prot_t;
 /* Define (sn)printf formatters for these lwIP types */
 #define X8_F  "02x"
 #define U16_F "hu"
-#define S16_F "hd"
-#define X16_F "hx"
 #define U32_F "lu"
 #define S32_F "ld"
 #define X32_F "lx"
-#define SZT_F U32_F
+
+#ifdef __GNUC__
+#define S16_F "d"
+#define X16_F "uX"
+#define SZT_F "u"
+#else
+#define S16_F "hd"
+#define X16_F "hx"
+#define SZT_F "lu"
+#endif
 
 /* Compiler hints for packing structures */
 #define PACK_STRUCT_STRUCT
@@ -99,11 +92,13 @@ typedef u32_t sys_prot_t;
   printf("Assertion \"%s\" failed at line %d in %s\n", message, __LINE__, __FILE__); \
   fflush(NULL);handler;} } while(0)
 
+#ifdef _MSC_VER
 /* C runtime functions redefined */
 #define snprintf _snprintf
+#endif
 
 u32_t dns_lookup_external_hosts_file(const char *name);
 
 #define LWIP_RAND() ((u32_t)rand())
 
-#endif /* __ARCH_CC_H__ */
+#endif /* LWIP_ARCH_CC_H */

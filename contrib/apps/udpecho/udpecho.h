@@ -29,9 +29,9 @@
  * Author: Adam Dunkels <adam@sics.se>
  *
  */
-#ifndef __UDPECHO_H__
-#define __UDPECHO_H__
+#ifndef LWIP_UDPECHO_H
+#define LWIP_UDPECHO_H
 
 void udpecho_init(void);
 
-#endif /* __UDPECHO_H__ */
+#endif /* LWIP_UDPECHO_H */

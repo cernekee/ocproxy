@@ -35,7 +35,11 @@ CC=gcc
 #To compile for cygwin: make ARCH=cygwin
 #To compile for openbsd: make ARCH=openbsd
 ARCH=openbsd
-CFLAGS=-g -Wall -pedantic -D$(ARCH) -DIPv4 -Os -fpack-struct -DLWIP_DEBUG
+CFLAGS=-g -Wall -D$(ARCH) -DIPv4 -Os -DLWIP_DEBUG -pedantic -Werror \
+	-Wparentheses -Wsequence-point -Wswitch-default \
+	-Wextra -Wundef -Wshadow -Wpointer-arith -Wbad-function-cast \
+	-Wc++-compat -Wwrite-strings -Wold-style-definition \
+	-Wmissing-prototypes -Wredundant-decls -Wnested-externs -Wno-address
 ARFLAGS=rs
 
 CONTRIBDIR=../../../..
@@ -47,18 +51,23 @@ LWIPDIR=$(CONTRIBDIR)/../lwip/src
 
 CFLAGS:=$(CFLAGS) \
 	-I$(LWIPDIR)/include -I$(LWIPARCH)/include -I$(LWIPDIR)/include/ipv4 \
-	-I. -I$(CONTRIBDIR)/apps/snmp_private_mib
+	-I$(LWIPDIR)/include/ipv6 -I. -I$(CONTRIBDIR)/apps/snmp_private_mib \
+	-I$(CONTRIBDIR)/apps/tcpecho_raw
 
 # COREFILES, CORE4FILES: The minimum set of files needed for lwIP.
-COREFILES=$(LWIPDIR)/core/mem.c $(LWIPDIR)/core/memp.c $(LWIPDIR)/core/netif.c \
-	$(LWIPDIR)/core/pbuf.c $(LWIPDIR)/core/raw.c \
-	$(LWIPDIR)/core/stats.c $(LWIPDIR)/core/sys.c \
-        $(LWIPDIR)/core/tcp.c $(LWIPDIR)/core/tcp_in.c \
-        $(LWIPDIR)/core/tcp_out.c $(LWIPDIR)/core/udp.c $(LWIPDIR)/core/dhcp.c \
-	$(LWIPDIR)/core/init.c $(LWIPDIR)/core/timers.c $(LWIPDIR)/core/def.c
-CORE4FILES=$(LWIPDIR)/core/ipv4/icmp.c $(LWIPDIR)/core/ipv4/ip.c \
-	$(LWIPDIR)/core/ipv4/inet.c $(LWIPDIR)/core/ipv4/ip_addr.c \
-	$(LWIPDIR)/core/ipv4/ip_frag.c $(LWIPDIR)/core/ipv4/inet_chksum.c 
+COREFILES=$(LWIPDIR)/core/def.c $(LWIPDIR)/core/dhcp.c $(LWIPDIR)/core/dns.c \
+	$(LWIPDIR)/core/inet_chksum.c $(LWIPDIR)/core/init.c $(LWIPDIR)/core/mem.c \
+	$(LWIPDIR)/core/memp.c $(LWIPDIR)/core/netif.c $(LWIPDIR)/core/pbuf.c \
+	$(LWIPDIR)/core/raw.c $(LWIPDIR)/core/stats.c $(LWIPDIR)/core/sys.c \
+	$(LWIPDIR)/core/tcp.c $(LWIPDIR)/core/tcp_in.c $(LWIPDIR)/core/tcp_in.c \
+	$(LWIPDIR)/core/tcp_out.c $(LWIPDIR)/core/timers.c $(LWIPDIR)/core/udp.c
+CORE4FILES=$(LWIPDIR)/core/ipv4/autoip.c $(LWIPDIR)/core/ipv4/icmp.c \
+	$(LWIPDIR)/core/ipv4/igmp.c $(LWIPDIR)/core/ipv4/ip_frag.c \
+	$(LWIPDIR)/core/ipv4/ip4.c $(LWIPDIR)/core/ipv4/ip4_addr.c
+CORE6FILES=$(LWIPDIR)/core/ipv6/dhcp6.c $(LWIPDIR)/core/ipv6/ethip6.c \
+	$(LWIPDIR)/core/ipv6/icmp6.c $(LWIPDIR)/core/ipv6/ip6.c \
+	$(LWIPDIR)/core/ipv6/ip6_addr.c $(LWIPDIR)/core/ipv6/ip6_frag.c \
+	$(LWIPDIR)/core/ipv6/mld6.c $(LWIPDIR)/core/ipv6/nd6.c
 
 # SNMPFILES: Extra SNMPv1 agent
 SNMPFILES=$(LWIPDIR)/core/snmp/asn1_dec.c $(LWIPDIR)/core/snmp/asn1_enc.c \
@@ -73,12 +82,12 @@ NETIFFILES=$(LWIPDIR)/netif/etharp.c mintapif.c
 ARCHFILES=$(LWIPARCH)/sys_arch.c
 
 # LWIPFILES: All the above.
-LWIPFILES=$(COREFILES) $(CORE4FILES) $(SNMPFILES) $(NETIFFILES) $(ARCHFILES)
+LWIPFILES=$(COREFILES) $(CORE4FILES) $(CORE6FILES) $(SNMPFILES) $(NETIFFILES) $(ARCHFILES)
 LWIPFILESW=$(wildcard $(LWIPFILES))
 LWIPOBJS=$(notdir $(LWIPFILESW:.c=.o))
 
 # APPFILES
-APPFILES=echo.c timer.c
+APPFILES=../../../../apps/tcpecho_raw/echo.c timer.c
 
 LWIPLIB=liblwip4.a
 APPLIB=liblwipapps.a

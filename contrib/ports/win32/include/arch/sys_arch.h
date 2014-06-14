@@ -29,8 +29,8 @@
  * Author: Adam Dunkels <adam@sics.se>
  *
  */
-#ifndef __ARCH_SYS_ARCH_H__
-#define __ARCH_SYS_ARCH_H__
+#ifndef LWIP_ARCH_SYS_ARCH_H
+#define LWIP_ARCH_SYS_ARCH_H
 
 /* HANDLE is used for sys_sem_t but we won't include windows.h */
 struct _sys_sem {
@@ -60,5 +60,5 @@ typedef struct lwip_mbox sys_mbox_t;
 /* DWORD (thread id) is used for sys_thread_t but we won't include windows.h */
 typedef u32_t sys_thread_t;
 
-#endif /* __ARCH_SYS_ARCH_H__ */
+#endif /* LWIP_ARCH_SYS_ARCH_H */
 

@@ -56,6 +56,11 @@ static LONGLONG sys_get_ms_longlong()
 {
   LONGLONG ret;
   LARGE_INTEGER now;
+#if NO_SYS
+  if (freq.QuadPart == 0) {
+    sys_init_timing();
+  }
+#endif /* NO_SYS */
   QueryPerformanceCounter(&now);
   ret = now.QuadPart-sys_start_time.QuadPart;
   return (u32_t)(((ret)*1000)/freq.QuadPart);
@@ -90,6 +95,7 @@ void sys_arch_unprotect(u32_t pval)
 
 void msvc_sys_init()
 {
+  srand(time(0));
   sys_init_timing();
   InitSysArchProtect();
 }

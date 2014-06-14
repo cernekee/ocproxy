@@ -29,8 +29,8 @@
  * Author: Adam Dunkels <adam@sics.se>
  *
  */
-#ifndef __DELIF_H__
-#define __DELIF_H__
+#ifndef LWIP_DELIF_H
+#define LWIP_DELIF_H
 
 #include "lwip/netif.h"
 
@@ -39,4 +39,4 @@
 err_t delif_init(struct netif *netif);
 err_t delif_init_thread(struct netif *netif);
 
-#endif /* __DELIF_H__ */
+#endif /* LWIP_DELIF_H */

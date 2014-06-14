@@ -52,6 +52,7 @@
 #include "lwip/sys.h"
 
 #include "netif/etharp.h"
+#include "lwip/ethip6.h"
 
 #if defined(LWIP_DEBUG) && defined(LWIP_TCPDUMP)
 #include "netif/tcpdump.h"
@@ -300,6 +301,9 @@ tapif_input(struct netif *netif)
   /* IP or ARP packet? */
   case ETHTYPE_IP:
   case ETHTYPE_ARP:
+#if LWIP_IPV6
+  case ETHTYPE_IPV6:
+#endif /* LWIP_IPV6 */
 #if PPPOE_SUPPORT
   /* PPPoE packet? */
   case ETHTYPE_PPPOEDISC:
@@ -340,6 +344,9 @@ tapif_init(struct netif *netif)
   netif->name[0] = IFNAME0;
   netif->name[1] = IFNAME1;
   netif->output = etharp_output;
+#if LWIP_IPV6
+  netif->output_ip6 = ethip6_output;
+#endif /* LWIP_IPV6 */
   netif->linkoutput = low_level_output;
   netif->mtu = 1500;
   /* hardware address length */

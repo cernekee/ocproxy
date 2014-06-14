@@ -4,6 +4,7 @@ AM_CFLAGS		= -Dunix -DIPv4 -DLWIP_DEBUG \
 			  -I$(srcdir)/lwip/src \
 			  -I$(srcdir)/lwip/src/include \
 			  -I$(srcdir)/lwip/src/include/ipv4 \
+			  -I$(srcdir)/lwip/src/include/ipv6 \
 			  -I$(srcdir)/contrib/ports/unix/include \
 			  -I$(srcdir)/src \
 			  -DDEFAULT_THREAD_STACKSIZE=65536 -DTCPIP_THREAD_STACKSIZE=65536
@@ -17,7 +18,10 @@ LWIP_SOURCES		:= \
 			   lwip/src/include/lwip/dhcp.h \
 			   lwip/src/include/lwip/dns.h \
 			   lwip/src/include/lwip/err.h \
+			   lwip/src/include/lwip/inet_chksum.h \
 			   lwip/src/include/lwip/init.h \
+			   lwip/src/include/lwip/ip.h \
+			   lwip/src/include/lwip/ip_addr.h \
 			   lwip/src/include/lwip/mem.h \
 			   lwip/src/include/lwip/memp.h \
 			   lwip/src/include/lwip/memp_std.h \
@@ -27,6 +31,7 @@ LWIP_SOURCES		:= \
 			   lwip/src/include/lwip/netif.h \
 			   lwip/src/include/lwip/opt.h \
 			   lwip/src/include/lwip/pbuf.h \
+			   lwip/src/include/lwip/pppapi.h \
 			   lwip/src/include/lwip/raw.h \
 			   lwip/src/include/lwip/sio.h \
 			   lwip/src/include/lwip/snmp_asn1.h \
@@ -42,10 +47,13 @@ LWIP_SOURCES		:= \
 			   lwip/src/include/lwip/timers.h \
 			   lwip/src/include/lwip/udp.h \
 			   lwip/src/include/netif/etharp.h \
-			   lwip/src/include/netif/ppp_oe.h \
 			   lwip/src/include/netif/slipif.h \
+			   lwip/src/include/netif/ppp/ppp.h \
+			   lwip/src/include/netif/ppp/pppoe.h \
+			   lwip/src/include/netif/ppp/pppol2tp.h \
 			   lwip/src/core/def.c \
 			   lwip/src/core/dns.c \
+			   lwip/src/core/inet_chksum.c \
 			   lwip/src/core/init.c \
 			   lwip/src/core/mem.c \
 			   lwip/src/core/memp.c \
@@ -61,16 +69,19 @@ LWIP_SOURCES		:= \
 			   lwip/src/include/ipv4/lwip/autoip.h \
 			   lwip/src/include/ipv4/lwip/icmp.h \
 			   lwip/src/include/ipv4/lwip/igmp.h \
-			   lwip/src/include/ipv4/lwip/inet_chksum.h \
 			   lwip/src/include/ipv4/lwip/inet.h \
-			   lwip/src/include/ipv4/lwip/ip_addr.h \
+			   lwip/src/include/ipv4/lwip/ip4_addr.h \
+			   lwip/src/include/ipv4/lwip/ip4.h \
 			   lwip/src/include/ipv4/lwip/ip_frag.h \
-			   lwip/src/include/ipv4/lwip/ip.h \
+			   lwip/src/include/ipv6/lwip/icmp6.h \
+			   lwip/src/include/ipv6/lwip/ip6_addr.h \
+			   lwip/src/include/ipv6/lwip/ip6.h \
+			   lwip/src/include/ipv6/lwip/ip6_frag.h \
+			   lwip/src/include/ipv6/lwip/mld6.h \
+			   lwip/src/include/ipv6/lwip/nd6.h \
 			   lwip/src/core/ipv4/icmp.c \
-			   lwip/src/core/ipv4/inet.c \
-			   lwip/src/core/ipv4/inet_chksum.c \
-			   lwip/src/core/ipv4/ip.c \
-			   lwip/src/core/ipv4/ip_addr.c \
+			   lwip/src/core/ipv4/ip4.c \
+			   lwip/src/core/ipv4/ip4_addr.c \
 			   lwip/src/core/ipv4/ip_frag.c \
 			   lwip/src/api/api_lib.c \
 			   lwip/src/api/api_msg.c \

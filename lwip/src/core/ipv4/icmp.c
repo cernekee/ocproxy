@@ -70,7 +70,7 @@ static void icmp_send_response(struct pbuf *p, u8_t type, u8_t code);
  * Currently only processes icmp echo requests and sends
  * out the echo response.
  *
- * @param p the icmp echo request packet, p->payload pointing to the ip header
+ * @param p the icmp echo request packet, p->payload pointing to the icmp header
  * @param inp the netif on which this packet was received
  */
 void
@@ -87,10 +87,9 @@ icmp_input(struct pbuf *p, struct netif *inp)
   ICMP_STATS_INC(icmp.recv);
   snmp_inc_icmpinmsgs();
 
-
-  iphdr = (struct ip_hdr *)p->payload;
+  iphdr = (struct ip_hdr *)ip_current_header();
   hlen = IPH_HL(iphdr) * 4;
-  if (pbuf_header(p, -hlen) || (p->tot_len < sizeof(u16_t)*2)) {
+  if (p->len < sizeof(u16_t)*2) {
     LWIP_DEBUGF(ICMP_DEBUG, ("icmp_input: short ICMP (%"U16_F" bytes) received\n", p->tot_len));
     goto lenerr;
   }
@@ -110,13 +109,13 @@ icmp_input(struct pbuf *p, struct netif *inp)
       int accepted = 1;
 #if !LWIP_MULTICAST_PING
       /* multicast destination address? */
-      if (ip_addr_ismulticast(&current_iphdr_dest)) {
+      if (ip_addr_ismulticast(ip_current_dest_addr())) {
         accepted = 0;
       }
 #endif /* LWIP_MULTICAST_PING */
 #if !LWIP_BROADCAST_PING
       /* broadcast destination address? */
-      if (ip_addr_isbroadcast(&current_iphdr_dest, inp)) {
+      if (ip_addr_isbroadcast(ip_current_dest_addr(), inp)) {
         accepted = 0;
       }
 #endif /* LWIP_BROADCAST_PING */
@@ -134,6 +133,7 @@ icmp_input(struct pbuf *p, struct netif *inp)
       LWIP_DEBUGF(ICMP_DEBUG, ("icmp_input: bad ICMP echo received\n"));
       goto lenerr;
     }
+#if CHECKSUM_CHECK_ICMP
     if (inet_chksum_pbuf(p) != 0) {
       LWIP_DEBUGF(ICMP_DEBUG, ("icmp_input: checksum failed for received ICMP echo\n"));
       pbuf_free(p);
@@ -141,6 +141,7 @@ icmp_input(struct pbuf *p, struct netif *inp)
       snmp_inc_icmpinerrors();
       return;
     }
+#endif
 #if LWIP_ICMP_ECHO_CHECK_INPUT_PBUF_LEN
     if (pbuf_header(p, (PBUF_IP_HLEN + PBUF_LINK_HLEN))) {
       /* p is not big enough to contain link headers
@@ -190,12 +191,16 @@ icmp_input(struct pbuf *p, struct netif *inp)
     ip_addr_copy(iphdr->src, *ip_current_dest_addr());
     ip_addr_copy(iphdr->dest, *ip_current_src_addr());
     ICMPH_TYPE_SET(iecho, ICMP_ER);
+#if CHECKSUM_GEN_ICMP
     /* adjust the checksum */
     if (iecho->chksum >= PP_HTONS(0xffffU - (ICMP_ECHO << 8))) {
       iecho->chksum += PP_HTONS(ICMP_ECHO << 8) + 1;
     } else {
       iecho->chksum += PP_HTONS(ICMP_ECHO << 8);
     }
+#else /* CHECKSUM_GEN_ICMP */
+    iecho->chksum = 0;
+#endif /* CHECKSUM_GEN_ICMP */
 
     /* Set the correct TTL and recalculate the header checksum. */
     IPH_TTL_SET(iphdr, ICMP_TTL);
@@ -321,7 +326,9 @@ icmp_send_response(struct pbuf *p, u8_t type, u8_t code)
 
   /* calculate checksum */
   icmphdr->chksum = 0;
+#if CHECKSUM_GEN_ICMP
   icmphdr->chksum = inet_chksum(icmphdr, q->len);
+#endif
   ICMP_STATS_INC(icmp.xmit);
   /* increase number of messages attempted to send */
   snmp_inc_icmpoutmsgs();

@@ -29,8 +29,8 @@
  * Author: Adam Dunkels <adam@sics.se>
  *
  */
-#ifndef __ARCH_PERF_H__
-#define __ARCH_PERF_H__
+#ifndef LWIP_ARCH_PERF_H
+#define LWIP_ARCH_PERF_H
 
 #include <sys/times.h>
 
@@ -60,4 +60,4 @@ void perf_print_times(struct tms *start, struct tms *end, char *key);
 
 void perf_init(char *fname);
 
-#endif /* __ARCH_PERF_H__ */
+#endif /* LWIP_ARCH_PERF_H */

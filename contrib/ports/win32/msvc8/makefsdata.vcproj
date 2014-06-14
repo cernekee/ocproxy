@@ -40,7 +40,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="$(LWIP_DIR)\src\include,$(LWIP_DIR)\src\include\ipv4,..\include"
+				AdditionalIncludeDirectories="&quot;$(LWIP_DIR)\src\include&quot;;&quot;$(LWIP_DIR)\src\include\ipv4&quot;;&quot;$(LWIP_DIR)\src\include\ipv6&quot;;..\include"
 				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
@@ -85,9 +85,6 @@
 				Name="VCAppVerifierTool"
 			/>
 			<Tool
-				Name="VCWebDeploymentTool"
-			/>
-			<Tool
 				Name="VCPostBuildEventTool"
 			/>
 		</Configuration>
@@ -118,7 +115,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="2"
 				EnableIntrinsicFunctions="true"
-				AdditionalIncludeDirectories="$(LWIP_DIR)\src\include,$(LWIP_DIR)\src\include\ipv4,..\include"
+				AdditionalIncludeDirectories="&quot;$(LWIP_DIR)\src\include&quot;;&quot;$(LWIP_DIR)\src\include\ipv4&quot;;&quot;$(LWIP_DIR)\src\include\ipv6&quot;;..\include"
 				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS"
 				RuntimeLibrary="2"
 				EnableFunctionLevelLinking="true"
@@ -162,9 +159,6 @@
 			/>
 			<Tool
 				Name="VCAppVerifierTool"
-			/>
-			<Tool
-				Name="VCWebDeploymentTool"
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"

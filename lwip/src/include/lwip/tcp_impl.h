@@ -29,20 +29,21 @@
  * Author: Adam Dunkels <adam@sics.se>
  *
  */
-#ifndef __LWIP_TCP_IMPL_H__
-#define __LWIP_TCP_IMPL_H__
+#ifndef LWIP_HDR_TCP_IMPL_H
+#define LWIP_HDR_TCP_IMPL_H
 
 #include "lwip/opt.h"
 
 #if LWIP_TCP /* don't build if not configured for use in lwipopts.h */
 
 #include "lwip/tcp.h"
-#include "lwip/sys.h"
 #include "lwip/mem.h"
 #include "lwip/pbuf.h"
 #include "lwip/ip.h"
 #include "lwip/icmp.h"
 #include "lwip/err.h"
+#include "lwip/ip6.h"
+#include "lwip/ip6_addr.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,7 +52,7 @@ extern "C" {
 /* Functions for interfacing with TCP: */
 
 /* Lower layer interface to TCP: */
-#define tcp_init() /* Compatibility define, no init needed. */
+void             tcp_init    (void);  /* Initialize this module. */
 void             tcp_tmr     (void);  /* Must be called every
                                          TCP_TMR_INTERVAL
                                          ms. (Typically 250 ms). */
@@ -71,6 +72,7 @@ void             tcp_rexmit  (struct tcp_pcb *pcb);
 void             tcp_rexmit_rto  (struct tcp_pcb *pcb);
 void             tcp_rexmit_fast (struct tcp_pcb *pcb);
 u32_t            tcp_update_rcv_ann_wnd(struct tcp_pcb *pcb);
+err_t            tcp_process_refused_data(struct tcp_pcb *pcb);
 
 /**
  * This is the Nagle algorithm: try to combine user data to send as few TCP
@@ -84,15 +86,16 @@ u32_t            tcp_update_rcv_ann_wnd(struct tcp_pcb *pcb);
 #define tcp_do_output_nagle(tpcb) ((((tpcb)->unacked == NULL) || \
                             ((tpcb)->flags & (TF_NODELAY | TF_INFR)) || \
                             (((tpcb)->unsent != NULL) && (((tpcb)->unsent->next != NULL) || \
-                              ((tpcb)->unsent->len >= (tpcb)->mss))) \
+                              ((tpcb)->unsent->len >= (tpcb)->mss))) || \
+                            ((tcp_sndbuf(tpcb) == 0) || (tcp_sndqueuelen(tpcb) >= TCP_SND_QUEUELEN)) \
                             ) ? 1 : 0)
 #define tcp_output_nagle(tpcb) (tcp_do_output_nagle(tpcb) ? tcp_output(tpcb) : ERR_OK)
 
 
-#define TCP_SEQ_LT(a,b)     ((s32_t)((a)-(b)) < 0)
-#define TCP_SEQ_LEQ(a,b)    ((s32_t)((a)-(b)) <= 0)
-#define TCP_SEQ_GT(a,b)     ((s32_t)((a)-(b)) > 0)
-#define TCP_SEQ_GEQ(a,b)    ((s32_t)((a)-(b)) >= 0)
+#define TCP_SEQ_LT(a,b)     ((s32_t)((u32_t)(a) - (u32_t)(b)) < 0)
+#define TCP_SEQ_LEQ(a,b)    ((s32_t)((u32_t)(a) - (u32_t)(b)) <= 0)
+#define TCP_SEQ_GT(a,b)     ((s32_t)((u32_t)(a) - (u32_t)(b)) > 0)
+#define TCP_SEQ_GEQ(a,b)    ((s32_t)((u32_t)(a) - (u32_t)(b)) >= 0)
 /* is b<=a<=c? */
 #if 0 /* see bug #10548 */
 #define TCP_SEQ_BETWEEN(a,b,c) ((c)-(b) >= (a)-(b))
@@ -170,11 +173,9 @@ PACK_STRUCT_END
 #  include "arch/epstruct.h"
 #endif
 
-#define TCPH_OFFSET(phdr) (ntohs((phdr)->_hdrlen_rsvd_flags) >> 8)
 #define TCPH_HDRLEN(phdr) (ntohs((phdr)->_hdrlen_rsvd_flags) >> 12)
 #define TCPH_FLAGS(phdr)  (ntohs((phdr)->_hdrlen_rsvd_flags) & TCP_FLAGS)
 
-#define TCPH_OFFSET_SET(phdr, offset) (phdr)->_hdrlen_rsvd_flags = htons(((offset) << 8) | TCPH_FLAGS(phdr))
 #define TCPH_HDRLEN_SET(phdr, len) (phdr)->_hdrlen_rsvd_flags = htons(((len) << 12) | TCPH_FLAGS(phdr))
 #define TCPH_FLAGS_SET(phdr, flags) (phdr)->_hdrlen_rsvd_flags = (((phdr)->_hdrlen_rsvd_flags & PP_HTONS((u16_t)(~(u16_t)(TCP_FLAGS)))) | htons(flags))
 #define TCPH_HDRLEN_FLAGS_SET(phdr, len, flags) (phdr)->_hdrlen_rsvd_flags = htons(((len) << 12) | (flags))
@@ -182,7 +183,7 @@ PACK_STRUCT_END
 #define TCPH_SET_FLAG(phdr, flags ) (phdr)->_hdrlen_rsvd_flags = ((phdr)->_hdrlen_rsvd_flags | htons(flags))
 #define TCPH_UNSET_FLAG(phdr, flags) (phdr)->_hdrlen_rsvd_flags = htons(ntohs((phdr)->_hdrlen_rsvd_flags) | (TCPH_FLAGS(phdr) & ~(flags)) )
 
-#define TCP_TCPLEN(seg) ((seg)->len + ((TCPH_FLAGS((seg)->tcphdr) & (TCP_FIN | TCP_SYN)) != 0))
+#define TCP_TCPLEN(seg) ((seg)->len + (((TCPH_FLAGS((seg)->tcphdr) & (TCP_FIN | TCP_SYN)) != 0) ? 1U : 0U))
 
 /** Flags used on input processing, not on pcb->flags
 */
@@ -293,22 +294,50 @@ struct tcp_seg {
 #define TF_SEG_OPTS_TS          (u8_t)0x02U /* Include timestamp option. */
 #define TF_SEG_DATA_CHECKSUMMED (u8_t)0x04U /* ALL data (not the header) is
                                                checksummed into 'chksum' */
+#define TF_SEG_OPTS_WND_SCALE   (u8_t)0x08U /* Include WND SCALE option */
   struct tcp_hdr *tcphdr;  /* the TCP header */
 };
 
-#define LWIP_TCP_OPT_LENGTH(flags)              \
-  (flags & TF_SEG_OPTS_MSS ? 4  : 0) +          \
-  (flags & TF_SEG_OPTS_TS  ? 12 : 0)
+#define LWIP_TCP_OPT_EOL        0
+#define LWIP_TCP_OPT_NOP        1
+#define LWIP_TCP_OPT_MSS        2
+#define LWIP_TCP_OPT_WS         3
+#define LWIP_TCP_OPT_TS         8
+
+#define LWIP_TCP_OPT_LEN_MSS    4
+#if LWIP_TCP_TIMESTAMPS
+#define LWIP_TCP_OPT_LEN_TS     10
+#define LWIP_TCP_OPT_LEN_TS_OUT 12 /* aligned for output (includes NOP padding) */
+#else
+#define LWIP_TCP_OPT_LEN_TS_OUT 0
+#endif
+#if LWIP_WND_SCALE
+#define LWIP_TCP_OPT_LEN_WS     3
+#define LWIP_TCP_OPT_LEN_WS_OUT 4 /* aligned for output (includes NOP padding) */
+#else
+#define LWIP_TCP_OPT_LEN_WS_OUT 0
+#endif
+
+#define LWIP_TCP_OPT_LENGTH(flags) \
+  (flags & TF_SEG_OPTS_MSS       ? LWIP_TCP_OPT_LEN_MSS    : 0) + \
+  (flags & TF_SEG_OPTS_TS        ? LWIP_TCP_OPT_LEN_TS_OUT : 0) + \
+  (flags & TF_SEG_OPTS_WND_SCALE ? LWIP_TCP_OPT_LEN_WS_OUT : 0)
 
 /** This returns a TCP header option for MSS in an u32_t */
-#define TCP_BUILD_MSS_OPTION(x) (x) = PP_HTONL(((u32_t)2 << 24) |          \
-                                               ((u32_t)4 << 16) |          \
-                                               (((u32_t)TCP_MSS / 256) << 8) | \
-                                               (TCP_MSS & 255))
+#define TCP_BUILD_MSS_OPTION(mss) htonl(0x02040000 | ((mss) & 0xFFFF))
+
+#if LWIP_WND_SCALE
+#define TCPWNDSIZE_F  U32_F
+#define TCPWND_MAX    0xFFFFFFFFU
+#else /* LWIP_WND_SCALE */
+#define TCPWNDSIZE_F  U16_F
+#define TCPWND_MAX    0xFFFFU
+#endif /* LWIP_WND_SCALE */
 
 /* Global variables: */
 extern struct tcp_pcb *tcp_input_pcb;
 extern u32_t tcp_ticks;
+extern u8_t tcp_active_pcbs_changed;
 
 /* The TCP PCB lists. */
 union tcp_listen_pcbs_t { /* List of all TCP PCBs in LISTEN state. */
@@ -395,6 +424,24 @@ extern struct tcp_pcb *tcp_tmp_pcb;      /* Only used for temporary storage. */
 
 #endif /* LWIP_DEBUG */
 
+#define TCP_REG_ACTIVE(npcb)                       \
+  do {                                             \
+    TCP_REG(&tcp_active_pcbs, npcb);               \
+    tcp_active_pcbs_changed = 1;                   \
+  } while (0)
+
+#define TCP_RMV_ACTIVE(npcb)                       \
+  do {                                             \
+    TCP_RMV(&tcp_active_pcbs, npcb);               \
+    tcp_active_pcbs_changed = 1;                   \
+  } while (0)
+
+#define TCP_PCB_REMOVE_ACTIVE(pcb)                 \
+  do {                                             \
+    tcp_pcb_remove(&tcp_active_pcbs, pcb);         \
+    tcp_active_pcbs_changed = 1;                   \
+  } while (0)
+
 
 /* Internal functions: */
 struct tcp_pcb *tcp_pcb_copy(struct tcp_pcb *pcb);
@@ -426,9 +473,20 @@ err_t tcp_enqueue_flags(struct tcp_pcb *pcb, u8_t flags);
 
 void tcp_rexmit_seg(struct tcp_pcb *pcb, struct tcp_seg *seg);
 
-void tcp_rst(u32_t seqno, u32_t ackno,
-       ip_addr_t *local_ip, ip_addr_t *remote_ip,
-       u16_t local_port, u16_t remote_port);
+void tcp_rst_impl(u32_t seqno, u32_t ackno,
+       ipX_addr_t *local_ip, ipX_addr_t *remote_ip,
+       u16_t local_port, u16_t remote_port
+#if LWIP_IPV6
+       , u8_t isipv6
+#endif /* LWIP_IPV6 */
+       );
+#if LWIP_IPV6
+#define tcp_rst(seqno, ackno, local_ip, remote_ip, local_port, remote_port, isipv6) \
+  tcp_rst_impl(seqno, ackno, local_ip, remote_ip, local_port, remote_port, isipv6)
+#else /* LWIP_IPV6 */
+#define tcp_rst(seqno, ackno, local_ip, remote_ip, local_port, remote_port, isipv6) \
+  tcp_rst_impl(seqno, ackno, local_ip, remote_ip, local_port, remote_port)
+#endif /* LWIP_IPV6 */
 
 u32_t tcp_next_iss(void);
 
@@ -436,7 +494,16 @@ void tcp_keepalive(struct tcp_pcb *pcb);
 void tcp_zero_window_probe(struct tcp_pcb *pcb);
 
 #if TCP_CALCULATE_EFF_SEND_MSS
-u16_t tcp_eff_send_mss(u16_t sendmss, ip_addr_t *addr);
+u16_t tcp_eff_send_mss_impl(u16_t sendmss, ipX_addr_t *dest
+#if LWIP_IPV6
+                           , ipX_addr_t *src, u8_t isipv6
+#endif /* LWIP_IPV6 */
+                           );
+#if LWIP_IPV6
+#define tcp_eff_send_mss(sendmss, src, dest, isipv6) tcp_eff_send_mss_impl(sendmss, dest, src, isipv6)
+#else /* LWIP_IPV6 */
+#define tcp_eff_send_mss(sendmss, src, dest, isipv6) tcp_eff_send_mss_impl(sendmss, dest)
+#endif /* LWIP_IPV6 */
 #endif /* TCP_CALCULATE_EFF_SEND_MSS */
 
 #if LWIP_CALLBACK_API
@@ -468,4 +535,4 @@ void tcp_timer_needed(void);
 
 #endif /* LWIP_TCP */
 
-#endif /* __LWIP_TCP_H__ */
+#endif /* LWIP_HDR_TCP_H */

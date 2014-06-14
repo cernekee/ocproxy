@@ -1,5 +1,5 @@
-#ifndef __HTTPD_STRUCTS_H__
-#define __HTTPD_STRUCTS_H__
+#ifndef LWIP_HTTPD_STRUCTS_H
+#define LWIP_HTTPD_STRUCTS_H
 
 #include "httpd.h"
 
@@ -54,6 +54,7 @@ static const char * const g_psHTTPHeaderStrings[] =
  "HTTP/1.1 501 Not Implemented\r\n",
  "Content-Length: ",
  "Connection: Close\r\n",
+ "Connection: keep-alive\r\n",
  "Server: "HTTPD_SERVER_AGENT"\r\n",
  "\r\n<html><body><h2>404: The requested file cannot be found.</h2></body></html>\r\n"
 };
@@ -83,8 +84,9 @@ static const char * const g_psHTTPHeaderStrings[] =
 #define HTTP_HDR_NOT_IMPL_11    21 /* 501 Not Implemented */
 #define HTTP_HDR_CONTENT_LENGTH 22 /* Content-Length: (HTTP 1.1)*/
 #define HTTP_HDR_CONN_CLOSE     23 /* Connection: Close (HTTP 1.1) */
-#define HTTP_HDR_SERVER         24 /* Server: HTTPD_SERVER_AGENT */
-#define DEFAULT_404_HTML        25 /* default 404 body */
+#define HTTP_HDR_CONN_KEEPALIVE 24 /* Connection: keep-alive (HTTP 1.1) */
+#define HTTP_HDR_SERVER         25 /* Server: HTTPD_SERVER_AGENT */
+#define DEFAULT_404_HTML        26 /* default 404 body */
 
 /** A list of extension-to-HTTP header strings */
 const static tHTTPHeader g_psHTTPHeaders[] =
@@ -105,11 +107,19 @@ const static tHTTPHeader g_psHTTPHeaders[] =
  { "ram",  HTTP_HDR_RA},
  { "css",  HTTP_HDR_CSS},
  { "swf",  HTTP_HDR_SWF},
- { "xml",  HTTP_HDR_XML}
+ { "xml",  HTTP_HDR_XML},
+ { "xsl",  HTTP_HDR_XML}
 };
 
 #define NUM_HTTP_HEADERS (sizeof(g_psHTTPHeaders) / sizeof(tHTTPHeader))
 
 #endif /* LWIP_HTTPD_DYNAMIC_HEADERS */
 
-#endif /* __HTTPD_STRUCTS_H__ */
+#if LWIP_HTTPD_SSI
+static const char * const g_pcSSIExtensions[] = {
+  ".shtml", ".shtm", ".ssi", ".xml"
+};
+#define NUM_SHTML_EXTENSIONS (sizeof(g_pcSSIExtensions) / sizeof(const char *))
+#endif /* LWIP_HTTPD_SSI */
+
+#endif /* LWIP_HTTPD_STRUCTS_H */

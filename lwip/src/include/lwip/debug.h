@@ -29,10 +29,11 @@
  * Author: Adam Dunkels <adam@sics.se>
  *
  */
-#ifndef __LWIP_DEBUG_H__
-#define __LWIP_DEBUG_H__
+#ifndef LWIP_HDR_DEBUG_H
+#define LWIP_HDR_DEBUG_H
 
 #include "lwip/arch.h"
+#include "lwip/opt.h"
 
 /** lower two bits indicate debug level
  * - 0 all
@@ -94,5 +95,5 @@
 #define LWIP_DEBUGF(debug, message) 
 #endif /* LWIP_DEBUG */
 
-#endif /* __LWIP_DEBUG_H__ */
+#endif /* LWIP_HDR_DEBUG_H */
 

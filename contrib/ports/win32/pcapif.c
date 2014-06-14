@@ -65,6 +65,7 @@
 #include "lwip/snmp.h"
 #include "lwip/tcpip.h"
 #include "lwip/timers.h"
+#include "lwip/ethip6.h"
 
 #include "netif/etharp.h"
 
@@ -153,7 +154,7 @@ get_adapter_index_from_addr(struct in_addr *netaddr, char *guid, size_t guid_len
    memset(guid, 0, guid_len);
 
    /* Retrieve the interfaces list */
-   if (pcap_findalldevs_ex(PCAP_SRC_IF_STRING, NULL, &alldevs, errbuf) == -1) {
+   if (pcap_findalldevs(&alldevs, errbuf) == -1) {
       printf("Error in pcap_findalldevs: %s\n", errbuf);
       return -1;
    }
@@ -292,6 +293,10 @@ pcapif_init_adapter(int adapter_num, void *arg)
           desc += 17;
         }
         len = LWIP_MIN(len, ADAPTER_DESC_LEN-1);
+        while ((desc[len-1] == ' ') || (desc[len-1] == '\t')) {
+          /* don't copy trailing whitespace */
+          len--;
+        }
         strncpy(pa->description, desc, len);
         pa->description[len] = 0;
       } else {
@@ -306,7 +311,7 @@ pcapif_init_adapter(int adapter_num, void *arg)
     char *desc = d->description;
     char descBuf[128];
     size_t len;
-    const char* devname = d->name;;
+    const char* devname = d->name;
     if (d->name == NULL) {
       devname = "<unnamed>";
     } else {
@@ -330,6 +335,10 @@ pcapif_init_adapter(int adapter_num, void *arg)
         desc += 17;
       }
       len = LWIP_MIN(len, 127);
+      while ((desc[len-1] == ' ') || (desc[len-1] == '\t')) {
+        /* don't copy trailing whitespace */
+        len--;
+      }
       strncpy(descBuf, desc, len);
       descBuf[len] = 0;
       printf("     Desc: \"%s\"\n", descBuf);
@@ -370,7 +379,7 @@ pcapif_init_adapter(int adapter_num, void *arg)
 #endif
                                errbuf);           /* error buffer */
   if (pa->adapter == NULL) {
-    printf("\nUnable to open the adapter. %s is not supported by WinPcap\n", d->name);
+    printf("\nUnable to open the adapter. %s is not supported by WinPcap\n", used_adapter->name);
     /* Free the device list */
     pcap_freealldevs(alldevs);
     free(pa);
@@ -389,9 +398,10 @@ pcapif_init_adapter(int adapter_num, void *arg)
 
 #if PCAPIF_HANDLE_LINKSTATE
 void
-pcapif_check_linkstate(void *netif)
+pcapif_check_linkstate(void *netif_ptr)
 {
-  struct pcapif_private *pa = (struct pcapif_private*)((struct netif *)netif)->state;
+  struct netif *netif = (struct netif*)netif_ptr;
+  struct pcapif_private *pa = (struct pcapif_private*)netif->state;
   enum pcapifh_link_event le;
 
   le = pcapifh_linkstate_get(pa->link_state);
@@ -449,13 +459,12 @@ pcapif_input_thread(void *arg)
 {
   struct netif *netif = (struct netif *)arg;
   struct pcapif_private *pa = (struct pcapif_private*)netif->state;
-  int ret;
   do
   {
-    ret = pcap_loop(pa->adapter, -1, pcapif_input, (u_char*)pa);
-    if (ret < 0)
-    {
-      sys_msleep(1);
+    struct pcap_pkthdr pkt_header;
+    const u_char *packet = pcap_next(pa->adapter, &pkt_header);
+    if(packet != NULL) {
+      pcapif_input((u_char*)pa, &pkt_header, packet);
     }
   } while (pa->rx_run);
   pa->rx_running = 0;
@@ -470,6 +479,18 @@ pcapif_low_level_init(struct netif *netif)
   u8_t my_mac_addr[ETHARP_HWADDR_LEN] = LWIP_MAC_ADDR_BASE;
   int adapter_num = PACKET_LIB_ADAPTER_NR;
   struct pcapif_private *pa;
+
+  /* If 'state' is != NULL at this point, we assume it is an 'int' giving
+     the index of the adapter to use (+ 1 because 0==NULL is invalid).
+     This can be used to instantiate multiple PCAP drivers. */
+  if (netif->state != NULL) {
+    adapter_num = ((int)netif->state) - 1;
+    if (adapter_num < 0) {
+      printf("ERROR: invalid adapter index \"%d\"!\n", adapter_num);
+      LWIP_ASSERT("ERROR initializing network adapter!\n", 0);
+      return;
+    }
+  }
 
 #ifdef PACKET_LIB_GET_ADAPTER_NETADDRESS
   ip_addr_t netaddr;
@@ -504,7 +525,7 @@ pcapif_low_level_init(struct netif *netif)
   /* Do whatever else is needed to initialize interface. */
   pa = pcapif_init_adapter(adapter_num, netif);
   if (pa == NULL) {
-    printf("ERROR initializing network adapter %d!\n", PACKET_LIB_ADAPTER_NR);
+    printf("ERROR initializing network adapter %d!\n", adapter_num);
     LWIP_ASSERT("ERROR initializing network adapter!", 0);
     return;
   }
@@ -531,10 +552,10 @@ pcapif_low_level_init(struct netif *netif)
 #if PCAPIF_RX_USE_THREAD
   pa->rx_run = 1;
   pa->rx_running = 1;
-  sys_thread_new("pktif_rxthread", pcapif_input_thread, netif, 0, 0);
+  sys_thread_new("pcapif_rxthread", pcapif_input_thread, netif, 0, 0);
 #endif
 
-  LWIP_DEBUGF(NETIF_DEBUG, ("pktif: eth_addr %02X%02X%02X%02X%02X%02X\n",netif->hwaddr[0],netif->hwaddr[1],netif->hwaddr[2],netif->hwaddr[3],netif->hwaddr[4],netif->hwaddr[5]));
+  LWIP_DEBUGF(NETIF_DEBUG, ("pcapif: eth_addr %02X%02X%02X%02X%02X%02X\n",netif->hwaddr[0],netif->hwaddr[1],netif->hwaddr[2],netif->hwaddr[3],netif->hwaddr[4],netif->hwaddr[5]));
 }
 
 /** low_level_output():
@@ -618,12 +639,22 @@ pcapif_low_level_input(struct netif *netif, const void *packet, int packet_len)
   struct eth_addr *dest = (struct eth_addr*)packet;
   struct eth_addr *src = dest + 1;
   int unicast;
+  const u8_t bcast[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+  const u8_t ipv4mcast[] = {0x01, 0x00, 0x5e};
+  const u8_t ipv6mcast[] = {0x33, 0x33};
+
+  /* Don't let feedback packets through (limitation in winpcap?) */
+  if(!memcmp(src, netif->hwaddr, ETHARP_HWADDR_LEN)) {
+    /* don't update counters here! */
+    return NULL;
+  }
 
   /* MAC filter: only let my MAC or non-unicast through (pcap receives loopback traffic, too) */
-  unicast = ((dest->addr[0] & 0x01) == 0);
-  if (((memcmp(dest, &netif->hwaddr, ETHARP_HWADDR_LEN)) && unicast) ||
-      /* and don't let feedback packets through (limitation in winpcap?) */
-      (!memcmp(src, netif->hwaddr, ETHARP_HWADDR_LEN))) {
+  unicast = ((dest->addr[0] & 0x01) == 0);  
+  if (memcmp(dest, &netif->hwaddr, ETHARP_HWADDR_LEN) &&
+    (memcmp(dest, ipv4mcast, 3) || ((dest->addr[3] & 0x80) != 0)) && 
+    memcmp(dest, ipv6mcast, 2) &&
+    memcmp(dest, bcast, 6)) {
     /* don't update counters here! */
     return NULL;
   }
@@ -717,8 +748,14 @@ pcapif_init(struct netif *netif)
   netif->linkoutput = pcapif_low_level_output;
 #if LWIP_ARP
   netif->output = etharp_output;
+#if LWIP_IPV6
+  netif->output_ip6 = ethip6_output;
+#endif /* LWIP_IPV6 */
 #else /* LWIP_ARP */
   netif->output = NULL; /* not used for PPPoE */
+#if LWIP_IPV6
+  netif->output_ip6 = NULL; /* not used for PPPoE */
+#endif /* LWIP_IPV6 */
 #endif /* LWIP_ARP */
 #if LWIP_NETIF_HOSTNAME
   /* Initialize interface hostname */

@@ -61,7 +61,7 @@ tcpip_init_done(void *arg)
 {
   ip_addr_t ipaddr, netmask, gateway;
   sys_sem_t *sem;
-  sem = arg;
+  sem = (sys_sem_t *)arg;
 
   /*
     CHANGE THESE to suit your own network configuration:
@@ -71,8 +71,10 @@ tcpip_init_done(void *arg)
   IP4_ADDR(&netmask, 255,255,255,0);
   
   netif_set_default(netif_add(&netif, &ipaddr, &netmask, &gateway, NULL, tapif_init,
-			      tcpip_input));
-
+                    tcpip_input));
+#if LWIP_IPV6
+  netif_create_ip6_linklocal_address(&netif, 1);
+#endif 
   sys_sem_signal(sem);
 }
 

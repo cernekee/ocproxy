@@ -79,7 +79,8 @@ static char errbuf[PCAP_ERRBUF_SIZE];
 
 /*-----------------------------------------------------------------------------------*/
 static err_t
-pcapif_output(struct netif *netif, struct pbuf *p, ip_addr_t *ipaddr)
+pcapif_output(struct netif *netif, struct pbuf *p,
+	      ip_addr_t *ipaddr)
 {
   return ERR_OK;
 }
@@ -106,15 +107,15 @@ timeout(void *arg)
     
     if (p != NULL) {
       /* We iterate over the pbuf chain until we have read the entire
-      packet into the pbuf. */
+	 packet into the pbuf. */
       bufptr = (u_char *)pcapif->pkt;
       for(q = p; q != NULL; q = q->next) {
-        /* Read enough bytes to fill this pbuf in the chain. The
-        available data in the pbuf is given by the q->len
-        variable. */
-        /* read data into(q->payload, q->len); */
-        bcopy(bufptr, q->payload, q->len);
-        bufptr += q->len;
+	/* Read enough bytes to fill this pbuf in the chain. The
+	   available data in the pbuf is given by the q->len
+	   variable. */
+	/* read data into(q->payload, q->len); */
+	bcopy(bufptr, q->payload, q->len);
+	bufptr += q->len;
       }
 
 #if defined(LWIP_DEBUG) && defined(LWIP_TCPDUMP)

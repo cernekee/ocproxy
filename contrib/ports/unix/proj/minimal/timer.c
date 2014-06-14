@@ -92,11 +92,11 @@ timer_init(void)
  * @param interval when > 0 enables this timer, 0 disables.
  */
 void
-timer_set_interval(unsigned char tmr, unsigned int interval)
+timer_set_interval(unsigned char tmr_num, unsigned int interval)
 {
-  if (tmr < TIMER_NUM)
+  if (tmr_num < TIMER_NUM)
   {
-    timers[tmr].interval = interval;
+    timers[tmr_num].interval = interval;
   }
 }
 
@@ -105,14 +105,14 @@ timer_set_interval(unsigned char tmr, unsigned int interval)
  * Returns timer event and restarts timer.
  */
 unsigned char
-timer_testclr_evt(unsigned char tmr)
+timer_testclr_evt(unsigned char tmr_num)
 {
-  if (tmr < TIMER_NUM)
+  if (tmr_num < TIMER_NUM)
   {
     unsigned char evt;
     struct itmr *tp;
 
-    tp = &timers[tmr];
+    tp = &timers[tmr_num];
     
     evt = tp->event;
     if (tp->event != 0)
@@ -136,6 +136,7 @@ sigalarm_handler(int sig)
 {
   unsigned char i;
   struct itmr *tp;
+  LWIP_UNUSED_ARG(sig);
 
   snmp_inc_sysuptime();
 

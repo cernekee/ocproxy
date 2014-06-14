@@ -45,16 +45,15 @@
 				Name="VCCLCompilerTool"
 				Optimization="2"
 				InlineFunctionExpansion="1"
-				AdditionalIncludeDirectories="$(LWIP_DIR)\src\include,$(LWIP_DIR)\src\include\ipv4,..\include,..,..\..\.."
+				AdditionalIncludeDirectories="&quot;$(LWIP_DIR)\src\include&quot;;&quot;$(LWIP_DIR)\src\include\ipv4&quot;;&quot;$(LWIP_DIR)\src\include\ipv6&quot;;..\include;..;..\..\.."
 				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_DEPRECATE"
 				StringPooling="true"
 				RuntimeLibrary="0"
-				StructMemberAlignment="1"
 				EnableFunctionLevelLinking="true"
 				UsePrecompiledHeader="0"
 				PrecompiledHeaderFile="$(IntDir)/$(TargetName).pch"
 				ProgramDataBaseFileName="$(IntDir)/$(ProjectName).pdb"
-				WarningLevel="3"
+				WarningLevel="4"
 				SuppressStartupBanner="true"
 				CompileAs="0"
 			/>
@@ -99,9 +98,6 @@
 				Name="VCAppVerifierTool"
 			/>
 			<Tool
-				Name="VCWebDeploymentTool"
-			/>
-			<Tool
 				Name="VCPostBuildEventTool"
 			/>
 		</Configuration>
@@ -135,17 +131,16 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="$(LWIP_DIR)\src\include,$(LWIP_DIR)\src\include\ipv4,..\include,..,..\..\.."
+				AdditionalIncludeDirectories="&quot;$(LWIP_DIR)\src\include&quot;;&quot;$(LWIP_DIR)\src\include\ipv4&quot;;&quot;$(LWIP_DIR)\src\include\ipv6&quot;;..\include;..;..\..\.."
 				PreprocessorDefinitions="_CONSOLE;WIN32;_DEBUG;LWIP_DEBUG;_CRT_SECURE_NO_DEPRECATE"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="1"
-				StructMemberAlignment="1"
 				UsePrecompiledHeader="0"
 				PrecompiledHeaderFile="$(IntDir)/$(TargetName).pch"
 				ProgramDataBaseFileName="$(IntDir)/$(ProjectName).pdb"
 				WarningLevel="4"
 				SuppressStartupBanner="true"
-				DebugInformationFormat="3"
+				DebugInformationFormat="4"
 				CompileAs="0"
 			/>
 			<Tool
@@ -163,7 +158,7 @@
 				Name="VCLinkerTool"
 				AdditionalDependencies="Packet.lib wpcap.lib"
 				OutputFile=".\Debug/test.exe"
-				LinkIncremental="1"
+				LinkIncremental="2"
 				SuppressStartupBanner="true"
 				AdditionalLibraryDirectories="$(PCAP_DIR)\Lib"
 				GenerateDebugInformation="true"
@@ -187,9 +182,6 @@
 			/>
 			<Tool
 				Name="VCAppVerifierTool"
-			/>
-			<Tool
-				Name="VCWebDeploymentTool"
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
@@ -333,6 +325,14 @@
 				</File>
 				<File
 					RelativePath="..\..\..\apps\shell\shell.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\..\apps\smtp\smtp.c"
+					>
+				</File>
+				<File
+					RelativePath="..\..\..\apps\smtp\smtp.h"
 					>
 				</File>
 				<File

@@ -29,8 +29,8 @@
  * Author: Adam Dunkels <adam@sics.se>
  *
  */
-#ifndef __LWIP_MEM_H__
-#define __LWIP_MEM_H__
+#ifndef LWIP_HDR_MEM_H
+#define LWIP_HDR_MEM_H
 
 #include "lwip/opt.h"
 
@@ -43,6 +43,7 @@ extern "C" {
 #include <stddef.h> /* for size_t */
 
 typedef size_t mem_size_t;
+#define MEM_SIZE_F SZT_F
 
 /* aliases for C library malloc() */
 #define mem_init()
@@ -119,4 +120,4 @@ void  mem_free(void *mem);
 }
 #endif
 
-#endif /* __LWIP_MEM_H__ */
+#endif /* LWIP_HDR_MEM_H */

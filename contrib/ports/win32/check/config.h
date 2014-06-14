@@ -1,4 +1,6 @@
-/* config.h for check-0.9.8 on win32 under MSVC */
+/* config.h for check-0.9.8 on win32 under MSVC/MinGW */
+
+#ifdef _MSC_VER
 
 typedef unsigned int pid_t;
 typedef unsigned int uint32_t;
@@ -15,6 +17,9 @@ typedef unsigned int uint32_t;
 /* disable some warnings */
 #pragma warning (disable: 4090) /* const assigned to non-const */
 #pragma warning (disable: 4996) /* fileno is deprecated */
+
+#endif /* _ MSC_VER */
+
 
 #define LWIP_UNITTESTS_NOFORK
 

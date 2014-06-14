@@ -33,8 +33,8 @@
  * capability.
  */
 
-#ifndef __HTTPD_H__
-#define __HTTPD_H__
+#ifndef LWIP_HTTPD_H
+#define LWIP_HTTPD_H
 
 #include "lwip/opt.h"
 #include "lwip/err.h"
@@ -233,4 +233,4 @@ void httpd_post_data_recved(void *connection, u16_t recved_len);
 
 void httpd_init(void);
 
-#endif /* __HTTPD_H__ */
+#endif /* LWIP_HTTPD_H */

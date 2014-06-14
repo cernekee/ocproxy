@@ -94,7 +94,7 @@ static struct option longopts[] = {
 };
 #define NUM_OPTS ((sizeof(longopts) / sizeof(struct option)) - 1)
 
-void usage(void)
+static void usage(void)
 {
   unsigned char i;
    
@@ -173,6 +173,9 @@ main(int argc, char **argv)
   netif_add(&netif, &ipaddr, &netmask, &gw, NULL, mintapif_init, ethernet_input);
   netif_set_default(&netif);
   netif_set_up(&netif);
+#if LWIP_IPV6
+  netif_create_ip6_linklocal_address(&netif, 1);
+#endif 
 
 
 #if SNMP_PRIVATE_MIB != 0

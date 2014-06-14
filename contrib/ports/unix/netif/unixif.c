@@ -83,7 +83,10 @@ struct unixif {
 static int
 unix_socket_client(const char *name)
 {
-  int fd, len;
+  int fd;
+#if !defined(linux) && !defined(cygwin) && !defined(__CYGWIN__)
+  int len;
+#endif
   struct sockaddr_un unix_addr;
 
                                 /* create a Unix domain stream socket */
@@ -100,14 +103,11 @@ unix_socket_client(const char *name)
   len = sizeof(unix_addr.sun_len) + sizeof(unix_addr.sun_family) +
     strlen(unix_addr.sun_path) + 1;
   unix_addr.sun_len = len;
-#else
-  len = sizeof(unix_addr.sun_family) +
-    strlen(unix_addr.sun_path) + 1;
 #endif /* linux */
 
   unlink(unix_addr.sun_path);             /* in case it already exists */
   if (bind(fd, (struct sockaddr *) &unix_addr,
-	   sizeof(struct sockaddr_un)) < 0) {
+      sizeof(struct sockaddr_un)) < 0) {
     perror("unixif: unix_socket_client: socket");
     return(-1);
   }
@@ -124,11 +124,9 @@ unix_socket_client(const char *name)
   len = sizeof(unix_addr.sun_len) + sizeof(unix_addr.sun_family) +
     strlen(unix_addr.sun_path) + 1;  
   unix_addr.sun_len = len;
-#else
-  len = sizeof(unix_addr.sun_family) + strlen(unix_addr.sun_path) + 1;
 #endif /* linux */
   if (connect(fd, (struct sockaddr *) &unix_addr,
-	     sizeof(struct sockaddr_un)) < 0) {
+      sizeof(struct sockaddr_un)) < 0) {
     perror("unixif: unix_socket_client: socket");
     return(-1);
   }
@@ -139,7 +137,10 @@ unix_socket_client(const char *name)
 static int
 unix_socket_server(const char *name)
 {
-  int fd, len;
+  int fd;
+#if !defined(linux) && !defined(cygwin) && !defined(__CYGWIN__)
+  int len;
+#endif
   struct sockaddr_un unix_addr;
 
   /* create a Unix domain stream socket */
@@ -158,14 +159,11 @@ unix_socket_server(const char *name)
   len = sizeof(unix_addr.sun_len) + sizeof(unix_addr.sun_family) +
     strlen(unix_addr.sun_path) + 1;
   unix_addr.sun_len = len;
-#else
-  len = sizeof(unix_addr.sun_family) +
-    strlen(unix_addr.sun_path) + 1;
 #endif /* linux */
 
   /* bind the name to the descriptor */
   if (bind(fd, (struct sockaddr *) &unix_addr,
-	   sizeof(struct sockaddr_un)) < 0) {
+      sizeof(struct sockaddr_un)) < 0) {
     perror("unixif: unix_socket_server: bind");
     return(-1);
   }
@@ -302,7 +300,7 @@ unixif_output(struct netif *netif, struct pbuf *p, ip_addr_t *ipaddr)
     pbuf_ref(p);
     list_push(unixif->q, buf);
     sys_timeout((double)p->tot_len * 8000.0 / UNIXIF_BPS, unixif_output_timeout,
-		netif);
+                netif);
 
     LWIP_DEBUGF(UNIXIF_DEBUG, ("unixif_output: first on list\n"));
 
@@ -382,7 +380,7 @@ unixif_output_timeout(void *arg)
   }
 
   LWIP_DEBUGF(UNIXIF_DEBUG, ("unixif_output: sending %d (%d) bytes\n",
-			p->len, p->tot_len));
+              p->len, p->tot_len));
 
   len = p->tot_len;
   if (write(unixif->fd, &len, sizeof(int)) == -1) {
@@ -407,12 +405,12 @@ unixif_output_timeout(void *arg)
 
   /*  if (unixif->q[0] != NULL) {
     sys_timeout(unixif->q[0]->tot_len * 8000 / UNIXIF_BPS,
-		unixif_output_timeout, netif);
-		}*/
+    unixif_output_timeout, netif);
+    }*/
   if (list_elems(unixif->q) > 0) {
     sys_timeout(((struct unixif_buf *)list_first(unixif->q))->tot_len *
-		8000.0 / UNIXIF_BPS,
-		unixif_output_timeout, netif);
+                8000.0 / UNIXIF_BPS,
+                unixif_output_timeout, netif);
   }
 }
 /*-----------------------------------------------------------------------------------*/

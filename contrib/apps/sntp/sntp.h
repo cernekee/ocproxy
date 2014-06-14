@@ -1,6 +1,15 @@
-#ifndef __SNTP_H__
-#define __SNTP_H__
+#ifndef LWIP_SNTP_H
+#define LWIP_SNTP_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 void sntp_init(void);
+void sntp_stop(void);
 
-#endif /* __SNTP_H__ */
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* LWIP_SNTP_H */

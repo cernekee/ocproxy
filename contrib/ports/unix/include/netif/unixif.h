@@ -29,12 +29,12 @@
  * Author: Adam Dunkels <adam@sics.se>
  *
  */
-#ifndef __UNIXIF_H__
-#define __UNIXIF_H__
+#ifndef LWIP_UNIXIF_H
+#define LWIP_UNIXIF_H
 
 #include "lwip/netif.h"
 
 err_t unixif_init_server(struct netif *netif);
 err_t unixif_init_client(struct netif *netif);
 
-#endif /* __UNIXIF_H__ */
+#endif /* LWIP_UNIXIF_H */

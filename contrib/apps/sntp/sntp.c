@@ -2,6 +2,16 @@
  * @file
  * SNTP client module
  *
+ * This is simple "SNTP" client for the lwIP raw API.
+ * It is a minimal implementation of SNTPv4 as specified in RFC 4330.
+ * 
+ * For a list of some public NTP servers, see this link :
+ * http://support.ntp.org/bin/view/Servers/NTPPoolServers
+ *
+ * @todo:
+ * - set/change servers at runtime
+ * - complete SNTP_CHECK_RESPONSE checks 3 and 4
+ * - support broadcast/multicast mode?
  */
 
 /*
@@ -47,30 +57,6 @@
 
 #if LWIP_UDP
 
-/** This is simple "SNTP" client for socket or raw API.
- * It is a minimal implementation of SNTPv4 as specified in RFC 4330.
- * 
- * For a list of some public NTP servers, see this link :
- * http://support.ntp.org/bin/view/Servers/NTPPoolServers
- *
- * @todo:
- * - set/change servers at runtime
- * - complete SNTP_CHECK_RESPONSE checks 3 and 4
- * - support broadcast/multicast mode?
- */
-
-/** Decide whether to build SNTP for socket or raw API
- * The socket API SNTP client is a very minimal implementation that does not
- * fully confor to the SNTPv4 RFC, especially regarding server load and error
- * procesing. */
-#ifndef SNTP_SOCKET
-#define SNTP_SOCKET                 0
-#endif
-
-#if SNTP_SOCKET
-#include "lwip/sockets.h"
-#endif
-
 /**
  * SNTP_DEBUG: Enable debugging for SNTP.
  */
@@ -93,7 +79,8 @@
 #define SNTP_SUPPORT_MULTIPLE_SERVERS 0
 #endif
 
-/** SNTP server address:
+/** \def SNTP_SERVER_ADDRESS
+ * \brief SNTP server address:
  * - as IPv4 address in "u32_t" format
  * - as a DNS name if SNTP_SERVER_DNS is set to 1
  * May contain multiple server names (e.g. "pool.ntp.org","second.time.server")
@@ -132,6 +119,13 @@
  */
 #ifndef SNTP_STARTUP_DELAY
 #define SNTP_STARTUP_DELAY          0
+#endif
+
+/** If you want the startup delay to be a function, define this
+ * to a function (including the brackets) and define SNTP_STARTUP_DELAY to 1.
+ */
+#ifndef SNTP_STARTUP_DELAY_FUNC
+#define SNTP_STARTUP_DELAY_FUNC     SNTP_STARTUP_DELAY
 #endif
 
 /** SNTP receive timeout - in milliseconds
@@ -345,103 +339,6 @@ sntp_initialize_request(struct sntp_msg *req)
 #endif /* SNTP_CHECK_RESPONSE >= 2 */
 }
 
-#if SNTP_SOCKET
-
-/**
- * Send an SNTP request via sockets.
- * This is a very minimal implementation that does not fully conform
- * to the SNTPv4 RFC, especially regarding server load and error procesing.
- */
-static void
-sntp_request(void *arg)
-{
-  int                sock;
-  struct sockaddr_in local;
-  struct sockaddr_in to;
-  int                tolen;
-  int                size;
-  int                timeout;
-  struct sntp_msg    sntpmsg;
-  ip_addr_t          sntp_server_address;
-
-  LWIP_UNUSED_ARG(arg);
-
-  /* if we got a valid SNTP server address... */
-  if (ipaddr_aton(SNTP_SERVER_ADDRESS, &sntp_server_address)) {
-    /* create new socket */
-    sock = lwip_socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock >= 0) {
-      /* prepare local address */
-      memset(&local, 0, sizeof(local));
-      local.sin_family      = AF_INET;
-      local.sin_port        = PP_HTONS(INADDR_ANY);
-      local.sin_addr.s_addr = PP_HTONL(INADDR_ANY);
-
-      /* bind to local address */
-      if (lwip_bind(sock, (struct sockaddr *)&local, sizeof(local)) == 0) {
-        /* set recv timeout */
-        timeout = SNTP_RECV_TIMEOUT;
-        lwip_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout));
-
-        /* prepare SNTP request */
-        sntp_initialize_request(&sntpmsg);
-
-        /* prepare SNTP server address */
-        memset(&to, 0, sizeof(to));
-        to.sin_family      = AF_INET;
-        to.sin_port        = PP_HTONS(SNTP_PORT);
-        inet_addr_from_ipaddr(&to.sin_addr, &sntp_server_address);
-    
-        /* send SNTP request to server */
-        if (lwip_sendto(sock, &sntpmsg, SNTP_MSG_LEN, 0, (struct sockaddr *)&to, sizeof(to)) >= 0) {
-          /* receive SNTP server response */
-          tolen = sizeof(to);
-          size  = lwip_recvfrom(sock, &sntpmsg, SNTP_MSG_LEN, 0, (struct sockaddr *)&to, (socklen_t *)&tolen);
-          /* if the response size is good */
-          if (size == SNTP_MSG_LEN) {
-            /* if this is a SNTP response... */
-            if (((sntpmsg.li_vn_mode & SNTP_MODE_MASK) == SNTP_MODE_SERVER) ||
-                ((sntpmsg.li_vn_mode & SNTP_MODE_MASK) == SNTP_MODE_BROADCAST)) {
-              /* do time processing */
-              sntp_process(sntpmsg.receive_timestamp);
-            } else {
-              LWIP_DEBUGF( SNTP_DEBUG_WARN, ("sntp_request: not response frame code\n"));
-            }
-          }
-        } else {
-          LWIP_DEBUGF( SNTP_DEBUG_WARN, ("sntp_request: not sendto==%i\n", errno));
-        }
-      }
-      /* close the socket */
-      closesocket(sock);
-    }
-  }
-}
-
-/**
- * SNTP thread
- */
-static void
-sntp_thread(void *arg)
-{
-  LWIP_UNUSED_ARG(arg);
-  while(1) {
-    sntp_request(NULL);
-    sys_msleep(SNTP_UPDATE_DELAY);
-  }
-}
-
-/**
- * Initialize this module when using sockets
- */
-void
-sntp_init(void)
-{
-  sys_thread_new("sntp_thread", sntp_thread, NULL, DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
-}
-
-#else /* SNTP_SOCKET */
-
 /**
  * Retry: send a new request (and increase retry timeout).
  *
@@ -604,6 +501,8 @@ sntp_send_request(ip_addr_t *server_addr)
     sntp_initialize_request(sntpmsg);
     /* send request */
     udp_sendto(sntp_pcb, p, server_addr, SNTP_PORT);
+    /* free the pbuf after sending it */
+    pbuf_free(p);
     /* set up receive timeout: try next server or retry on timeout */
     sys_timeout((u32_t)SNTP_RECV_TIMEOUT, sntp_try_next_server, NULL);
 #if SNTP_CHECK_RESPONSE >= 1
@@ -641,7 +540,7 @@ sntp_dns_found(const char* hostname, ip_addr_t *ipaddr, void *arg)
 #endif /* SNTP_SERVER_DNS */
 
 /**
- * Send out an sntp request via raw API.
+ * Send out an sntp request.
  *
  * @param arg is unused (only necessary to conform to sys_timeout)
  */
@@ -678,25 +577,37 @@ sntp_request(void *arg)
 }
 
 /**
- * Initialize this module when using raw API.
- * Send out request instantly or after SNTP_STARTUP_DELAY.
+ * Initialize this module.
+ * Send out request instantly or after SNTP_STARTUP_DELAY(_FUNC).
  */
 void
 sntp_init(void)
 {
-  SNTP_RESET_RETRY_TIMEOUT();
-  sntp_pcb = udp_new();
-  LWIP_ASSERT("Failed to allocate udp pcb for sntp client", sntp_pcb != NULL);
-  if (sntp_pcb != NULL) {
-    udp_recv(sntp_pcb, sntp_recv, NULL);
+  if (sntp_pcb == NULL) {
+    SNTP_RESET_RETRY_TIMEOUT();
+    sntp_pcb = udp_new();
+    LWIP_ASSERT("Failed to allocate udp pcb for sntp client", sntp_pcb != NULL);
+    if (sntp_pcb != NULL) {
+      udp_recv(sntp_pcb, sntp_recv, NULL);
 #if SNTP_STARTUP_DELAY
-    sys_timeout((u32_t)SNTP_STARTUP_DELAY, sntp_request, NULL);
+      sys_timeout((u32_t)SNTP_STARTUP_DELAY_FUNC, sntp_request, NULL);
 #else
-    sntp_request(NULL);
+      sntp_request(NULL);
 #endif
+    }
   }
 }
 
-#endif /* SNTP_SOCKET */
-
+/**
+ * Stop this module.
+ */
+void
+sntp_stop(void)
+{
+  if (sntp_pcb != NULL) {
+    sys_untimeout(sntp_request, NULL);
+    udp_remove(sntp_pcb);
+    sntp_pcb = NULL;
+  }
+}
 #endif /* LWIP_UDP */

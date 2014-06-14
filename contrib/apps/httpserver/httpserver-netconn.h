@@ -1,6 +1,6 @@
-#ifndef __HTTPSERVER_NETCONN_H__
-#define __HTTPSERVER_NETCONN_H__
+#ifndef LWIP_HTTPSERVER_NETCONN_H
+#define LWIP_HTTPSERVER_NETCONN_H
 
 void http_server_netconn_init();
 
-#endif /* __HTTPSERVER_NETCONN_H__ */
+#endif /* LWIP_HTTPSERVER_NETCONN_H */

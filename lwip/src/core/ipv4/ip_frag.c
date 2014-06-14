@@ -423,7 +423,7 @@ ip_reass_chain_frag_into_datagram_and_validate(struct ip_reassdata *ipr, struct 
     if (valid) {
       /* then check if the rest of the fragments is here */
       /* Check if the queue starts with the first datagram */
-      if (((struct ip_reass_helper*)ipr->p->payload)->start != 0) {
+      if ((ipr->p == NULL) || (((struct ip_reass_helper*)ipr->p->payload)->start != 0)) {
         valid = 0;
       } else {
         /* and check that there are no wholes after this datagram */
@@ -481,7 +481,6 @@ ip_reass(struct pbuf *p)
   struct ip_reass_helper *iprh;
   u16_t offset, len;
   u8_t clen;
-  struct ip_reassdata *ipr_prev = NULL;
 
   IPFRAG_STATS_INC(ip_frag.recv);
   snmp_inc_ipreasmreqds();
@@ -527,7 +526,6 @@ ip_reass(struct pbuf *p)
       IPFRAG_STATS_INC(ip_frag.cachehit);
       break;
     }
-    ipr_prev = ipr;
   }
 
   if (ipr == NULL) {
@@ -565,6 +563,7 @@ ip_reass(struct pbuf *p)
   /* find the right place to insert this pbuf */
   /* @todo: trim pbufs if fragments are overlapping */
   if (ip_reass_chain_frag_into_datagram_and_validate(ipr, p)) {
+    struct ip_reassdata *ipr_prev;
     /* the totally last fragment (flag more fragments = 0) was received at least
      * once AND all fragments are received */
     ipr->datagram_len += IP_HLEN;
@@ -579,7 +578,9 @@ ip_reass(struct pbuf *p)
     IPH_OFFSET_SET(fraghdr, 0);
     IPH_CHKSUM_SET(fraghdr, 0);
     /* @todo: do we need to set calculate the correct checksum? */
+#if CHECKSUM_GEN_IP
     IPH_CHKSUM_SET(fraghdr, inet_chksum(fraghdr, IP_HLEN));
+#endif /* CHECKSUM_GEN_IP */
 
     p = ipr->p;
 
@@ -592,6 +593,18 @@ ip_reass(struct pbuf *p)
       pbuf_cat(p, r);
       r = iprh->next_pbuf;
     }
+
+    /* find the previous entry in the linked list */
+    if (ipr == reassdatagrams) {
+      ipr_prev = NULL;
+    } else {
+      for (ipr_prev = reassdatagrams; ipr_prev != NULL; ipr_prev = ipr_prev->next) {
+        if (ipr_prev->next == ipr) {
+          break;
+        }
+      }
+    }
+
     /* release the sources allocate for the fragment queue entry */
     ip_reass_dequeue_datagram(ipr, ipr_prev);
 
@@ -811,7 +824,9 @@ ip_frag(struct pbuf *p, struct netif *netif, ip_addr_t *dest)
     IPH_OFFSET_SET(iphdr, htons(tmp));
     IPH_LEN_SET(iphdr, htons(cop + IP_HLEN));
     IPH_CHKSUM_SET(iphdr, 0);
+#if CHECKSUM_GEN_IP
     IPH_CHKSUM_SET(iphdr, inet_chksum(iphdr, IP_HLEN));
+#endif /* CHECKSUM_GEN_IP */
 
 #if IP_FRAG_USES_STATIC_BUF
     if (last) {

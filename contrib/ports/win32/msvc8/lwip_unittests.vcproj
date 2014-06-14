@@ -39,7 +39,8 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="..\check;..\..\..\..\check\src;$(LWIP_DIR)\src\include,$(LWIP_DIR)\src\include\ipv4,..\include,.."
+				AdditionalIncludeDirectories="..\check;..\..\..\..\check\src;&quot;$(LWIP_DIR)\test\unit&quot;;&quot;$(LWIP_DIR)\src\include&quot;;&quot;$(LWIP_DIR)\src\include\ipv4&quot;;&quot;$(LWIP_DIR)\src\include\ipv6&quot;;..\include;.."
+				PreprocessorDefinitions="_LIB;WIN32;_DEBUG;LWIP_DEBUG"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="1"
@@ -109,8 +110,9 @@
 				Name="VCCLCompilerTool"
 				Optimization="2"
 				EnableIntrinsicFunctions="true"
-				AdditionalIncludeDirectories="..\check;..\..\..\..\check\src;$(LWIP_DIR)\src\include,$(LWIP_DIR)\src\include\ipv4,..\include,.."
-				RuntimeLibrary="2"
+				AdditionalIncludeDirectories="..\check;..\..\..\..\check\src;&quot;$(LWIP_DIR)\test\unit&quot;;&quot;$(LWIP_DIR)\src\include&quot;;&quot;$(LWIP_DIR)\src\include\ipv4&quot;;&quot;$(LWIP_DIR)\src\include\ipv6&quot;;..\include;.."
+				PreprocessorDefinitions="WIN32;NDEBUG;_LIB"
+				RuntimeLibrary="0"
 				EnableFunctionLevelLinking="true"
 				WarningLevel="4"
 				DebugInformationFormat="3"
@@ -168,6 +170,14 @@
 				RelativePath="..\..\..\..\lwip\test\unit\core\test_mem.h"
 				>
 			</File>
+			<File
+				RelativePath="..\..\..\..\lwip\test\unit\core\test_pbuf.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\..\..\lwip\test\unit\core\test_pbuf.h"
+				>
+			</File>
 		</Filter>
 		<Filter
 			Name="tcp"
@@ -221,12 +231,28 @@
 				>
 			</File>
 		</Filter>
+		<Filter
+			Name="dhcp"
+			>
+			<File
+				RelativePath="..\..\..\..\lwip\test\unit\dhcp\test_dhcp.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\..\..\lwip\test\unit\dhcp\test_dhcp.h"
+				>
+			</File>
+		</Filter>
 		<File
 			RelativePath="..\..\..\..\lwip\test\unit\lwip_check.h"
 			>
 		</File>
 		<File
 			RelativePath="..\..\..\..\lwip\test\unit\lwip_unittests.c"
+			>
+		</File>
+		<File
+			RelativePath="..\..\..\..\lwip\test\unit\lwipopts.h"
 			>
 		</File>
 	</Files>

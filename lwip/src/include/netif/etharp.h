@@ -32,8 +32,8 @@
  *
  */
 
-#ifndef __NETIF_ETHARP_H__
-#define __NETIF_ETHARP_H__
+#ifndef LWIP_HDR_NETIF_ETHARP_H
+#define LWIP_HDR_NETIF_ETHARP_H
 
 #include "lwip/opt.h"
 
@@ -129,14 +129,21 @@ PACK_STRUCT_END
 #endif
 
 #define SIZEOF_ETHARP_HDR 28
-#define SIZEOF_ETHARP_PACKET (SIZEOF_ETH_HDR + SIZEOF_ETHARP_HDR)
 
-/** 5 seconds period */
-#define ARP_TMR_INTERVAL 5000
+#define SIZEOF_ETHARP_PACKET    (SIZEOF_ETH_HDR + SIZEOF_ETHARP_HDR)
+#if ETHARP_SUPPORT_VLAN && defined(LWIP_HOOK_VLAN_SET)
+#define SIZEOF_ETHARP_PACKET_TX (SIZEOF_ETHARP_PACKET + SIZEOF_VLAN_HDR)
+#else /* ETHARP_SUPPORT_VLAN && defined(LWIP_HOOK_VLAN_SET) */
+#define SIZEOF_ETHARP_PACKET_TX SIZEOF_ETHARP_PACKET
+#endif /* ETHARP_SUPPORT_VLAN && defined(LWIP_HOOK_VLAN_SET) */
+
+/** 1 seconds period */
+#define ARP_TMR_INTERVAL 1000
 
 #define ETHTYPE_ARP       0x0806U
 #define ETHTYPE_IP        0x0800U
 #define ETHTYPE_VLAN      0x8100U
+#define ETHTYPE_IPV6      0x86DDU
 #define ETHTYPE_PPPOEDISC 0x8863U  /* PPP Over Ethernet Discovery Stage */
 #define ETHTYPE_PPPOE     0x8864U  /* PPP Over Ethernet Session Stage */
 
@@ -190,6 +197,7 @@ err_t etharp_request(struct netif *netif, ip_addr_t *ipaddr);
  *  nodes to update an entry in their ARP cache.
  *  From RFC 3220 "IP Mobility Support for IPv4" section 4.6. */
 #define etharp_gratuitous(netif) etharp_request((netif), &(netif)->ip_addr)
+void etharp_cleanup_netif(struct netif *netif);
 
 #if ETHARP_SUPPORT_STATIC_ENTRIES
 err_t etharp_add_static_entry(ip_addr_t *ipaddr, struct eth_addr *ethaddr);
@@ -218,4 +226,4 @@ extern const struct eth_addr ethbroadcast, ethzero;
 }
 #endif
 
-#endif /* __NETIF_ARP_H__ */
+#endif /* LWIP_HDR_NETIF_ARP_H */

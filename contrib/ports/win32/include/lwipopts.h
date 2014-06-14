@@ -29,8 +29,8 @@
  * Author: Adam Dunkels <adam@sics.se>
  *
  */
-#ifndef __LWIPOPTS_H__
-#define __LWIPOPTS_H__
+#ifndef LWIP_LWIPOPTS_H
+#define LWIP_LWIPOPTS_H
 
 #define NO_SYS                     0
 #define LWIP_SOCKET               (NO_SYS==0)
@@ -141,7 +141,7 @@ a lot of data that needs to be copied, this should be set high. */
 
 /* ---------- Pbuf options ---------- */
 /* PBUF_POOL_SIZE: the number of buffers in the pbuf pool. */
-#define PBUF_POOL_SIZE          100
+#define PBUF_POOL_SIZE          120
 
 /* PBUF_POOL_BUFSIZE: the size of each pbuf in the pbuf pool. */
 #define PBUF_POOL_BUFSIZE       128
@@ -282,4 +282,4 @@ a lot of data that needs to be copied, this should be set high. */
 
 #endif /* PPP_SUPPORT */
 
-#endif /* __LWIPOPTS_H__ */
+#endif /* LWIP_LWIPOPTS_H */

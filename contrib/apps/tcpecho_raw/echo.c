@@ -41,9 +41,11 @@
  */
 
 
+#include "lwip/opt.h"
 #include "lwip/debug.h"
 #include "lwip/stats.h"
 #include "lwip/tcp.h"
+#include "echo.h"
 
 #if LWIP_TCP
 
@@ -109,7 +111,9 @@ echo_accept(void *arg, struct tcp_pcb *newpcb, err_t err)
   LWIP_UNUSED_ARG(arg);
   LWIP_UNUSED_ARG(err);
 
-  /* commonly observed practive to call tcp_setprio(), why? */
+  /* Unless this pcb should have NORMAL priority, set its priority now.
+     When running out of pcbs, low priority pcbs can be aborted to create
+     new pcbs of higher priority. */
   tcp_setprio(newpcb, TCP_PRIO_MIN);
 
   es = (struct echo_state *)mem_malloc(sizeof(struct echo_state));

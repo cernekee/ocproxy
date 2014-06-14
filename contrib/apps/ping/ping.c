@@ -236,7 +236,8 @@ ping_recv(void *arg, struct raw_pcb *pcb, struct pbuf *p, ip_addr_t *addr)
   LWIP_UNUSED_ARG(addr);
   LWIP_ASSERT("p != NULL", p != NULL);
 
-  if (pbuf_header( p, -PBUF_IP_HLEN)==0) {
+  if ((p->tot_len >= (PBUF_IP_HLEN + sizeof(struct icmp_echo_hdr))) &&
+      pbuf_header(p, -PBUF_IP_HLEN) == 0) {
     iecho = (struct icmp_echo_hdr *)p->payload;
 
     if ((iecho->id == PING_ID) && (iecho->seqno == htons(ping_seq_num))) {
@@ -249,6 +250,8 @@ ping_recv(void *arg, struct raw_pcb *pcb, struct pbuf *p, ip_addr_t *addr)
       pbuf_free(p);
       return 1; /* eat the packet */
     }
+    /* not eaten, restore original packet */
+    pbuf_header(p, PBUF_IP_HLEN);
   }
 
   return 0; /* don't eat the packet */

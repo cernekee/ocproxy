@@ -29,8 +29,8 @@
  * Author: Adam Dunkels <adam@sics.se>
  *
  */
-#ifndef __LWIP_DEF_H__
-#define __LWIP_DEF_H__
+#ifndef LWIP_HDR_DEF_H
+#define LWIP_HDR_DEF_H
 
 /* arch.h might define NULL already */
 #include "lwip/arch.h"
@@ -46,10 +46,6 @@ extern "C" {
 #ifndef NULL
 #define NULL ((void *)0)
 #endif
-
-/** Get the absolute difference between 2 u32_t values (correcting overflows)
- * 'a' is expected to be 'higher' (without overflow) than 'b'. */
-#define LWIP_U32_DIFF(a, b) (((a) >= (b)) ? ((a) - (b)) : (((a) + ((b) ^ 0xFFFFFFFF) + 1))) 
 
 /* Endianess-optimized shifting of two u8_t to create one u16_t */
 #if BYTE_ORDER == LITTLE_ENDIAN
@@ -123,5 +119,5 @@ u32_t lwip_ntohl(u32_t x);
 }
 #endif
 
-#endif /* __LWIP_DEF_H__ */
+#endif /* LWIP_HDR_DEF_H */
 

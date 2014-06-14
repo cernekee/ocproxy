@@ -30,9 +30,9 @@
  *
  */
 
-#ifndef __TCPECHO_H__
-#define __TCPECHO_H__
+#ifndef LWIP_TCPECHO_H
+#define LWIP_TCPECHO_H
 
 void tcpecho_init(void);
 
-#endif /* __TCPECHO_H__ */
+#endif /* LWIP_TCPECHO_H */

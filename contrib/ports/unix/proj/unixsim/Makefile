@@ -35,18 +35,17 @@ CC=gcc
 #To compile for linux: make ARCH=linux
 #To compile for cygwin: make ARCH=cygwin
 ARCH=unix
-CFLAGS=-g -D$(ARCH) -DIPv4 -DLWIP_DEBUG \
-	-pedantic -Werror \
+CFLAGS=-g -Wall -D$(ARCH) -DIPv4 -DLWIP_DEBUG -pedantic -Werror \
 	-Wparentheses -Wsequence-point -Wswitch-default \
 	-Wextra -Wundef -Wshadow -Wpointer-arith -Wbad-function-cast \
 	-Wc++-compat -Wwrite-strings -Wold-style-definition \
-	-Wmissing-prototypes -Wredundant-decls -Wnested-externs
+	-Wmissing-prototypes -Wredundant-decls -Wnested-externs -Wno-address
 # not used for now but interesting:
 # -Wpacked
 # -Wunreachable-code
 # -ansi
 # -std=c89
-LDFLAGS=-lpthread -lutil
+LDFLAGS=-pthread -lutil
 CONTRIBDIR=../../../..
 LWIPARCH=$(CONTRIBDIR)/ports/unix
 ARFLAGS=rs
@@ -59,17 +58,22 @@ CFLAGS:=$(CFLAGS) \
 	-I. -I$(CONTRIBDIR)/apps/httpserver_raw -I$(CONTRIBDIR)/apps/shell \
 	-I$(CONTRIBDIR)/apps/tcpecho -I$(CONTRIBDIR)/apps/udpecho \
 	-I$(LWIPDIR)/include -I$(LWIPARCH)/include -I$(LWIPDIR)/include/ipv4 \
-	-I$(LWIPDIR)
+	-I$(LWIPDIR)/include/ipv6 -I$(LWIPDIR)
 
 # COREFILES, CORE4FILES: The minimum set of files needed for lwIP.
-COREFILES=$(LWIPDIR)/core/mem.c $(LWIPDIR)/core/memp.c $(LWIPDIR)/core/netif.c \
-	$(LWIPDIR)/core/pbuf.c $(LWIPDIR)/core/raw.c $(LWIPDIR)/core/stats.c \
-	$(LWIPDIR)/core/sys.c $(LWIPDIR)/core/tcp.c $(LWIPDIR)/core/tcp_in.c \
-	$(LWIPDIR)/core/tcp_out.c $(LWIPDIR)/core/udp.c $(LWIPDIR)/core/dhcp.c \
-	$(LWIPDIR)/core/init.c $(LWIPDIR)/core/timers.c $(LWIPDIR)/core/def.c \
-	$(LWIPDIR)/core/dns.c
-CORE4FILES=$(wildcard $(LWIPDIR)/core/ipv4/*.c) $(LWIPDIR)/core/ipv4/inet.c \
-	$(LWIPDIR)/core/ipv4/inet_chksum.c
+COREFILES=$(LWIPDIR)/core/def.c $(LWIPDIR)/core/dhcp.c $(LWIPDIR)/core/dns.c \
+	$(LWIPDIR)/core/inet_chksum.c $(LWIPDIR)/core/init.c $(LWIPDIR)/core/mem.c \
+	$(LWIPDIR)/core/memp.c $(LWIPDIR)/core/netif.c $(LWIPDIR)/core/pbuf.c \
+	$(LWIPDIR)/core/raw.c $(LWIPDIR)/core/stats.c $(LWIPDIR)/core/sys.c \
+	$(LWIPDIR)/core/tcp.c $(LWIPDIR)/core/tcp_in.c $(LWIPDIR)/core/tcp_in.c \
+	$(LWIPDIR)/core/tcp_out.c $(LWIPDIR)/core/timers.c $(LWIPDIR)/core/udp.c
+CORE4FILES=$(LWIPDIR)/core/ipv4/autoip.c $(LWIPDIR)/core/ipv4/icmp.c \
+	$(LWIPDIR)/core/ipv4/igmp.c $(LWIPDIR)/core/ipv4/ip_frag.c \
+	$(LWIPDIR)/core/ipv4/ip4.c $(LWIPDIR)/core/ipv4/ip4_addr.c
+CORE6FILES=$(LWIPDIR)/core/ipv6/dhcp6.c $(LWIPDIR)/core/ipv6/ethip6.c \
+	$(LWIPDIR)/core/ipv6/icmp6.c $(LWIPDIR)/core/ipv6/ip6.c \
+	$(LWIPDIR)/core/ipv6/ip6_addr.c $(LWIPDIR)/core/ipv6/ip6_frag.c \
+	$(LWIPDIR)/core/ipv6/mld6.c $(LWIPDIR)/core/ipv6/nd6.c
 
 # SNMPFILES: Extra SNMPv1 agent
 SNMPFILES=$(LWIPDIR)/core/snmp/asn1_dec.c $(LWIPDIR)/core/snmp/asn1_enc.c \
@@ -77,8 +81,9 @@ SNMPFILES=$(LWIPDIR)/core/snmp/asn1_dec.c $(LWIPDIR)/core/snmp/asn1_enc.c \
 	$(LWIPDIR)/core/snmp/msg_in.c $(LWIPDIR)/core/snmp/msg_out.c
 
 # APIFILES: The files which implement the sequential and socket APIs.
-APIFILES=$(LWIPDIR)/api/api_lib.c $(LWIPDIR)/api/api_msg.c $(LWIPDIR)/api/tcpip.c \
-	$(LWIPDIR)/api/err.c $(LWIPDIR)/api/sockets.c $(LWIPDIR)/api/netbuf.c $(LWIPDIR)/api/netdb.c
+APIFILES=$(LWIPDIR)/api/api_lib.c $(LWIPDIR)/api/api_msg.c $(LWIPDIR)/api/err.c \
+	$(LWIPDIR)/api/netbuf.c $(LWIPDIR)/api/netdb.c $(LWIPDIR)/api/netifapi.c \
+	$(LWIPDIR)/api/sockets.c $(LWIPDIR)/api/tcpip.c
 
 # NETIFFILES: Files implementing various generic network interface functions.'
 NETIFFILES=$(LWIPDIR)/netif/etharp.c $(LWIPDIR)/netif/slipif.c
@@ -101,7 +106,7 @@ APPFILES=$(CONTRIBDIR)/apps/httpserver_raw/fs.c $(CONTRIBDIR)/apps/httpserver_ra
 	$(CONTRIBDIR)/apps/shell/shell.c
 
 # LWIPFILES: All the above.
-LWIPFILES=$(COREFILES) $(CORE4FILES) $(SNMPFILES) $(APIFILES) $(NETIFFILES) $(ARCHFILES)
+LWIPFILES=$(COREFILES) $(CORE4FILES) $(CORE6FILES) $(SNMPFILES) $(APIFILES) $(NETIFFILES) $(ARCHFILES)
 LWIPFILESW=$(wildcard $(LWIPFILES))
 LWIPOBJS=$(notdir $(LWIPFILESW:.c=.o))
 
@@ -116,7 +121,7 @@ all ipv4 compile: simhost
 .PHONY: all
 
 clean:
-	rm -f *.o $(LWIPLIB) $(APPLIB) simhost simnode simrouter ocfw *.s .depend* *.core core
+	rm -f *.o $(LWIPLIB) $(APPLIB) simhost simnode simrouter *.s .depend* *.core core
 
 depend dep: .depend
 
@@ -128,7 +133,7 @@ $(APPLIB): $(APPOBJS)
 $(LWIPLIB): $(LWIPOBJS)
 	$(AR) $(ARFLAGS) $(LWIPLIB) $?
 
-.depend: simhost.c simnode.c simrouter.c ocfw.c tcpfw.c ocif.c $(LWIPFILES) $(APPFILES)
+.depend: simhost.c simnode.c simrouter.c $(LWIPFILES) $(APPFILES)
 	$(CCDEP) $(CFLAGS) -MM $^ > .depend || rm -f .depend
 
 simhost: .depend $(LWIPLIB) $(APPLIB) simhost.o $(APPFILES)
@@ -139,7 +144,4 @@ simrouter: .depend $(LWIPLIB) $(APPLIB) simrouter.o
 
 simnode: .depend $(LWIPLIB) $(APPLIB) simnode.o 
 	$(CC) $(CFLAGS) $(LDFLAGS) -o simnode simnode.o $(APPLIB) $(LWIPLIB)
-
-ocfw: .depend $(LWIPLIB) $(APPLIB) ocfw.o tcpfw.o ocif.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o ocfw ocfw.o tcpfw.o ocif.o $(APPLIB) $(LWIPLIB)
 

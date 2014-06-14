@@ -38,13 +38,11 @@
 
 #define GETCWD(path, len)             GetCurrentDirectoryA(len, path)
 #define CHDIR(path)                   SetCurrentDirectoryA(path)
-
-#define NEWLINE     "\r\n"
-#define NEWLINE_LEN 2
+#define CHDIR_SUCCEEDED(ret)          (ret == TRUE)
 
 #else
 
-#define FIND_T                        struct fflbk
+#define FIND_T                        struct ffblk
 #define FIND_T_FILENAME(fInfo)        (fInfo.ff_name)
 #define FIND_T_IS_DIR(fInfo)          ((fInfo.ff_attrib & FA_DIREC) == FA_DIREC)
 #define FIND_T_IS_FILE(fInfo)         (1)
@@ -57,15 +55,20 @@
 
 #define GETCWD(path, len)             getcwd(path, len)
 #define CHDIR(path)                   chdir(path)
+#define CHDIR_SUCCEEDED(ret)          (ret == 0)
 
 #endif
 
+#define NEWLINE     "\r\n"
+#define NEWLINE_LEN 2
+
 /* define this to get the header variables we use to build HTTP headers */
 #define LWIP_HTTPD_DYNAMIC_HEADERS 1
+#define LWIP_HTTPD_SSI             1
 #include "../httpd_structs.h"
 
-#include "../../../../lwip/src/core/ipv4/inet_chksum.c"
-#include "../../../../lwip/src/core/def.c"
+#include "../core/inet_chksum.c"
+#include "../core/def.c"
 
 /** (Your server name here) */
 const char *serverID = "Server: "HTTPD_SERVER_AGENT"\r\n";
@@ -84,6 +87,12 @@ static int payload_alingment_dummy_counter = 0;
 
 #define COPY_BUFSIZE 10240
 
+struct file_entry
+{
+   struct file_entry* next;
+   const char* filename_c;
+};
+
 int process_sub(FILE *data_file, FILE *struct_file);
 int process_file(FILE *data_file, FILE *struct_file, const char *filename);
 int file_write_http_header(FILE *data_file, const char *filename, int file_size,
@@ -91,6 +100,7 @@ int file_write_http_header(FILE *data_file, const char *filename, int file_size,
 int file_put_ascii(FILE *file, const char *ascii_string, int len, int *i);
 int s_put_ascii(char *buf, const char *ascii_string, int len, int *i);
 void concat_files(const char *file1, const char *file2, const char *targetfile);
+int check_path(char* path, size_t size);
 
 static unsigned char file_buffer_raw[COPY_BUFSIZE];
 /* 5 bytes per char + 3 bytes per line */
@@ -103,12 +113,14 @@ char hdr_buf[4096];
 unsigned char processSubs = 1;
 unsigned char includeHttpHeader = 1;
 unsigned char useHttp11 = 0;
+unsigned char supportSsi = 1;
 unsigned char precalcChksum = 0;
+
+struct file_entry* first_file = NULL;
+struct file_entry* last_file = NULL;
 
 int main(int argc, char *argv[])
 {
-  FIND_T fInfo;
-  FIND_RET_T fret;
   char path[MAX_PATH_LEN];
   char appPath[MAX_PATH_LEN];
   FILE *data_file;
@@ -134,20 +146,29 @@ int main(int argc, char *argv[])
         includeHttpHeader = 0;
       } else if (strstr(argv[i], "-11")) {
         useHttp11 = 1;
+      } else if (strstr(argv[i], "-nossi")) {
+        supportSsi = 0;
       } else if (strstr(argv[i], "-c")) {
         precalcChksum = 1;
       } else if((argv[i][1] == 'f') && (argv[i][2] == ':')) {
-        strcpy(targetfile, &argv[i][3]);
+        strncpy(targetfile, &argv[i][3], sizeof(targetfile) - 1);
+        targetfile[sizeof(targetfile) - 1] = 0;
         printf("Writing to file \"%s\"\n", targetfile);
       }
     } else {
-      strcpy(path, argv[i]);
+      strncpy(path, argv[i], sizeof(path)-1);
+      path[sizeof(path)-1] = 0;
     }
   }
 
+  if(!check_path(path, sizeof(path))) {
+    printf("Invalid path: \"%s\"." NEWLINE, path);
+    exit(-1);
+  }
+
+  GETCWD(appPath, MAX_PATH_LEN);
   /* if command line param or subdir named 'fs' not found spout usage verbiage */
-  fret = FINDFIRST_DIR(path, &fInfo);
-  if (!FINDFIRST_SUCCEEDED(fret)) {
+  if (!CHDIR_SUCCEEDED(CHDIR(path))) {
     /* if no subdir named 'fs' (or the one which was given) exists, spout usage verbiage */
     printf(" Failed to open directory \"%s\"." NEWLINE NEWLINE, path);
     printf(" Usage: htmlgen [targetdir] [-s] [-i] [-f:<filename>]" NEWLINE NEWLINE);
@@ -155,12 +176,14 @@ int main(int argc, char *argv[])
     printf("   switch -s: toggle processing of subdirectories (default is on)" NEWLINE);
     printf("   switch -e: exclude HTTP header from file (header is created at runtime, default is off)" NEWLINE);
     printf("   switch -11: include HTTP 1.1 header (1.0 is default)" NEWLINE);
+    printf("   switch -nossi: no support for SSI (cannot calculate Content-Length for SSI)" NEWLINE);
     printf("   switch -c: precalculate checksums for all pages (default is off)" NEWLINE);
     printf("   switch -f: target filename (default is \"fsdata.c\")" NEWLINE);
     printf("   if targetdir not specified, htmlgen will attempt to" NEWLINE);
     printf("   process files in subdirectory 'fs'" NEWLINE);
     exit(-1);
   }
+  CHDIR(appPath);
 
   printf("HTTP %sheader will %s statically included." NEWLINE,
     (includeHttpHeader ? (useHttp11 ? "1.1 " : "1.0 ") : ""),
@@ -174,7 +197,6 @@ int main(int argc, char *argv[])
     printf("..." NEWLINE NEWLINE);
   }
 
-  GETCWD(appPath, MAX_PATH_LEN);
   data_file = fopen("fsdata.tmp", "wb");
   if (data_file == NULL) {
     printf("Failed to create file \"fsdata.tmp\"\n");
@@ -183,6 +205,7 @@ int main(int argc, char *argv[])
   struct_file = fopen("fshdr.tmp", "wb");
   if (struct_file == NULL) {
     printf("Failed to create file \"fshdr.tmp\"\n");
+    fclose(data_file);
     exit(-1);
   }
 
@@ -213,12 +236,45 @@ int main(int argc, char *argv[])
   concat_files("fsdata.tmp", "fshdr.tmp", targetfile);
 
   /* if succeeded, delete the temporary files */
-  remove("fsdata.tmp");
-  remove("fshdr.tmp"); 
+  if (remove("fsdata.tmp") != 0) {
+    printf("Warning: failed to delete fsdata.tmp\n");
+  }
+  if (remove("fshdr.tmp") != 0) {
+    printf("Warning: failed to delete fshdr.tmp\n");
+  }
 
   printf(NEWLINE "Processed %d files - done." NEWLINE NEWLINE, filesProcessed);
 
+  while (first_file != NULL) {
+     struct file_entry* fe = first_file;
+     first_file = fe->next;
+     free(fe);
+  }
+
   return 0;
+}
+
+int check_path(char* path, size_t size)
+{
+  size_t slen;
+  if (path[0] == 0) {
+    /* empty */
+    return 0;
+  }
+  slen = strlen(path);
+  if (slen >= size) {
+    /* not NULL-terminated */
+    return 0;
+  }
+  while ((slen > 0) && ((path[slen] == '\\') || (path[slen] == '/'))) {
+    /* path should not end with trailing backslash */
+    path[slen] = 0;
+    slen--;
+  }
+  if (slen == 0) {
+    return 0;
+  }
+  return 1;
 }
 
 static void copy_file(const char *filename_in, FILE *fout)
@@ -256,26 +312,34 @@ int process_sub(FILE *data_file, FILE *struct_file)
   FIND_T fInfo;
   FIND_RET_T fret;
   int filesProcessed = 0;
-  char oldSubdir[MAX_PATH_LEN];
 
   if (processSubs) {
     /* process subs recursively */
-    strcpy(oldSubdir, curSubdir);
+    size_t sublen = strlen(curSubdir);
+    size_t freelen = sizeof(curSubdir) - sublen - 1;
+    LWIP_ASSERT("sublen < sizeof(curSubdir)", sublen < sizeof(curSubdir));
     fret = FINDFIRST_DIR("*", &fInfo);
     if (FINDFIRST_SUCCEEDED(fret)) {
       do {
         const char *curName = FIND_T_FILENAME(fInfo);
-        if (curName == NULL) continue;
-        if (curName[0] == '.') continue;
-        if (strcmp(curName, "CVS") == 0) continue;
-        if (!FIND_T_IS_DIR(fInfo)) continue;
-        CHDIR(curName);
-        strcat(curSubdir, "/");
-        strcat(curSubdir, curName);
-        printf(NEWLINE "processing subdirectory %s/..." NEWLINE, curSubdir);
-        filesProcessed += process_sub(data_file, struct_file);
-        CHDIR("..");
-        strcpy(curSubdir, oldSubdir);
+        if ((curName[0] == '.') || (strcmp(curName, "CVS") == 0)) {
+          continue;
+        }
+        if (!FIND_T_IS_DIR(fInfo)) {
+          continue;
+        }
+        if (freelen > 0) {
+           CHDIR(curName);
+           strncat(curSubdir, "/", freelen);
+           strncat(curSubdir, curName, freelen - 1);
+           curSubdir[sizeof(curSubdir) - 1] = 0;
+           printf(NEWLINE "processing subdirectory %s/..." NEWLINE, curSubdir);
+           filesProcessed += process_sub(data_file, struct_file);
+           CHDIR("..");
+           curSubdir[sublen] = 0;
+        } else {
+           printf("WARNING: cannot process sub due to path length restrictions: \"%s/%s\"\n", curSubdir, curName);
+        }
       } while (FINDNEXT_SUCCEEDED(FINDNEXT(fret, &fInfo)));
     }
   }
@@ -319,6 +383,10 @@ void process_file_data(const char *filename, FILE *data_file)
   size_t len, written, i, src_off=0;
 
   source_file = fopen(filename, "rb");
+  if (source_file == NULL) {
+    printf("Failed to open file \"%s\"\n", filename);
+    exit(-1);
+  }
 
   do {
     size_t off = 0;
@@ -356,7 +424,7 @@ int write_checksums(FILE *struct_file, const char *filename, const char *varname
 
   memset(file_buffer_raw, 0xab, sizeof(file_buffer_raw));
   f = fopen(filename, "rb");
-  if (f == INVALID_HANDLE_VALUE) {
+  if (f == NULL) {
     printf("Failed to open file \"%s\"\n", filename);
     exit(-1);
   }
@@ -382,9 +450,71 @@ int write_checksums(FILE *struct_file, const char *filename, const char *varname
   return i;
 }
 
+static int is_valid_char_for_c_var(char x)
+{
+   if (((x >= 'A') && (x <= 'Z')) ||
+       ((x >= 'a') && (x <= 'z')) ||
+       ((x >= '0') && (x <= '9')) ||
+        (x == '_'))
+   {
+      return 1;
+   }
+   return 0;
+}
+
+static void fix_filename_for_c(char* qualifiedName, size_t max_len)
+{
+   struct file_entry* f;
+   size_t len = strlen(qualifiedName);
+   char *new_name = malloc(len + 2);
+   int filename_ok;
+   int cnt = 0;
+   size_t i;
+   if (len + 3 == max_len) {
+      printf("File name too long: \"%s\"\n", qualifiedName);
+      exit(-1);
+   }
+   strcpy(new_name, qualifiedName);
+   for (i = 0; i < len; i++) {
+      if (!is_valid_char_for_c_var(new_name[i])) {
+         new_name[i] = '_';
+      }
+   }
+   do {
+      filename_ok = 1;
+      for (f = first_file; f != NULL; f = f->next) {
+         if (!strcmp(f->filename_c, new_name)) {
+            filename_ok = 0;
+            cnt++;
+            // try next unique file name
+            sprintf(&new_name[len], "%d", cnt);
+            break;
+         }
+      }
+   } while (!filename_ok && (cnt < 999));
+   if (!filename_ok) {
+      printf("Failed to get unique file name: \"%s\"\n", qualifiedName);
+      exit(-1);
+   }
+   strcpy(qualifiedName, new_name);
+   free(new_name);
+}
+
+static void register_filename(const char* qualifiedName)
+{
+   struct file_entry* fe = malloc(sizeof(struct file_entry));
+   fe->filename_c = strdup(qualifiedName);
+   fe->next = NULL;
+   if (first_file == NULL) {
+      first_file = last_file = fe;
+   } else {
+      last_file->next = fe;
+      last_file = fe;
+   }
+}
+
 int process_file(FILE *data_file, FILE *struct_file, const char *filename)
 {
-  char *pch;
   char varname[MAX_PATH_LEN];
   int i = 0;
   char qualifiedName[MAX_PATH_LEN];
@@ -398,9 +528,8 @@ int process_file(FILE *data_file, FILE *struct_file, const char *filename)
   /* create C variable name */
   strcpy(varname, qualifiedName);
   /* convert slashes & dots to underscores */
-  while ((pch = strpbrk(varname, "./\\")) != NULL) {
-    *pch = '_';
-  }
+  fix_filename_for_c(varname, MAX_PATH_LEN);
+  register_filename(varname);
 #if ALIGN_PAYLOAD
   /* to force even alignment of array */
   fprintf(data_file, "static const " PAYLOAD_ALIGN_TYPE " dummy_align_%s = %d;" NEWLINE, varname, payload_alingment_dummy_counter++);
@@ -463,6 +592,17 @@ int file_write_http_header(FILE *data_file, const char *filename, int file_size,
   u16_t acc;
   const char *file_ext;
   int j;
+  u8_t keepalive = useHttp11;
+
+  if (keepalive) {
+    size_t loop;
+    for (loop = 0; loop < NUM_SHTML_EXTENSIONS; loop++) {
+      if (strstr(filename, g_pcSSIExtensions[loop])) {
+        /* no keepalive connection for SSI files */
+        keepalive = 0;
+      }
+    }
+  }
 
   memset(hdr_buf, 0, sizeof(hdr_buf));
   
@@ -508,9 +648,11 @@ int file_write_http_header(FILE *data_file, const char *filename, int file_size,
   }
 
   file_ext = filename;
-  while(strstr(file_ext, ".") != NULL) {
-    file_ext = strstr(file_ext, ".");
-    file_ext++;
+  if (file_ext != NULL) {
+    while(strstr(file_ext, ".") != NULL) {
+      file_ext = strstr(file_ext, ".");
+      file_ext++;
+    }
   }
   if((file_ext == NULL) || (*file_ext == 0)) {
     printf("failed to get extension for file \"%s\", using default.\n", filename);
@@ -529,28 +671,38 @@ int file_write_http_header(FILE *data_file, const char *filename, int file_size,
 
   if (useHttp11) {
     char intbuf[MAX_PATH_LEN];
+    int content_len = file_size;
     memset(intbuf, 0, sizeof(intbuf));
 
-    cur_string = g_psHTTPHeaderStrings[HTTP_HDR_CONTENT_LENGTH];
-    cur_len = strlen(cur_string);
-    fprintf(data_file, NEWLINE "/* \"%s%d\r\n\" (%d+ bytes) */" NEWLINE, cur_string, file_size, cur_len+2);
-    written += file_put_ascii(data_file, cur_string, cur_len, &i);
-    if (precalcChksum) {
-      memcpy(&hdr_buf[hdr_len], cur_string, cur_len);
-      hdr_len += cur_len;
+    if (!keepalive) {
+      content_len *= 2;
+    }
+    {
+      cur_string = g_psHTTPHeaderStrings[HTTP_HDR_CONTENT_LENGTH];
+      cur_len = strlen(cur_string);
+      fprintf(data_file, NEWLINE "/* \"%s%d\r\n\" (%d+ bytes) */" NEWLINE, cur_string, content_len, cur_len+2);
+      written += file_put_ascii(data_file, cur_string, cur_len, &i);
+      if (precalcChksum) {
+        memcpy(&hdr_buf[hdr_len], cur_string, cur_len);
+        hdr_len += cur_len;
+      }
+
+      _itoa(content_len, intbuf, 10);
+      strcat(intbuf, "\r\n");
+      cur_len = strlen(intbuf);
+      written += file_put_ascii(data_file, intbuf, cur_len, &i);
+      i = 0;
+      if (precalcChksum) {
+        memcpy(&hdr_buf[hdr_len], intbuf, cur_len);
+        hdr_len += cur_len;
+      }
     }
 
-    _itoa(file_size, intbuf, 10);
-    strcat(intbuf, "\r\n");
-    cur_len = strlen(intbuf);
-    written += file_put_ascii(data_file, intbuf, cur_len, &i);
-    i = 0;
-    if (precalcChksum) {
-      memcpy(&hdr_buf[hdr_len], intbuf, cur_len);
-      hdr_len += cur_len;
+    if (keepalive) {
+      cur_string = g_psHTTPHeaderStrings[HTTP_HDR_CONN_KEEPALIVE];
+    } else {
+      cur_string = g_psHTTPHeaderStrings[HTTP_HDR_CONN_CLOSE];
     }
-
-    cur_string = g_psHTTPHeaderStrings[HTTP_HDR_CONN_CLOSE];
     cur_len = strlen(cur_string);
     fprintf(data_file, NEWLINE "/* \"%s\" (%d bytes) */" NEWLINE, cur_string, cur_len);
     written += file_put_ascii(data_file, cur_string, cur_len, &i);

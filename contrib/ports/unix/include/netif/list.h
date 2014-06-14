@@ -1,6 +1,6 @@
 
-#ifndef __LIST_H__
-#define __LIST_H__
+#ifndef LWIP_LIST_H
+#define LWIP_LIST_H
 
 struct elem;
 

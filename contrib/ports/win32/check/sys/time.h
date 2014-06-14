@@ -1,5 +1,5 @@
-#ifndef __SYS__TIME_H__
-#define __SYS__TIME_H__
+#ifndef LWIP_SYS__TIME_H
+#define LWIP_SYS__TIME_H
 
 #include <stdlib.h> /* time_t */
 

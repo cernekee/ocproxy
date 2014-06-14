@@ -359,6 +359,9 @@ init_netifs(void)
   netif_set_up(&netif);
 
 #endif
+#if LWIP_IPV6
+  netif_create_ip6_linklocal_address(&netif, 1);
+#endif
 
 #if 0
   /* Only used for testing purposes: */
@@ -385,8 +388,6 @@ main_thread(void *arg)
   sio_fd_t ppp_sio;
 #endif
   LWIP_UNUSED_ARG(arg);
-
-  netif_init();
 
   if(sys_sem_new(&sem, 0) != ERR_OK) {
     LWIP_ASSERT("Failed to create semaphore", 0);

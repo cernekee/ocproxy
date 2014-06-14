@@ -29,12 +29,15 @@
  * Author: Adam Dunkels <adam@sics.se>
  *
  */
-#ifndef __ARCH_CC_H__
-#define __ARCH_CC_H__
+#ifndef LWIP_ARCH_CC_H
+#define LWIP_ARCH_CC_H
 
 /* Include some files for defining library routines */
 #include <string.h>
 #include <sys/time.h>
+#include <limits.h>
+
+#define LWIP_TIMEVAL_PRIVATE 0
 
 /* Define platform endianness */
 #ifndef BYTE_ORDER
@@ -79,9 +82,13 @@ typedef unsigned long mem_ptr_t;
 /* Plaform specific diagnostic output */
 #define LWIP_PLATFORM_DIAG(x)	do {printf x;} while(0)
 
+#ifdef LWIP_UNIX_EMPTY_ASSERT
+#define LWIP_PLATFORM_ASSERT(x)
+#else
 #define LWIP_PLATFORM_ASSERT(x) do {printf("Assertion \"%s\" failed at line %d in %s\n", \
                                      x, __LINE__, __FILE__); fflush(NULL); abort();} while(0)
+#endif
 
 #define LWIP_RAND() ((u32_t)rand())
 
-#endif /* __ARCH_CC_H__ */
+#endif /* LWIP_ARCH_CC_H */
