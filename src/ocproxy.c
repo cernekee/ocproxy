@@ -171,6 +171,8 @@ static struct event_base *event_base;
 static struct ocp_sock ocp_sock_pool[MAX_CONN];
 static struct ocp_sock *ocp_sock_free_list;
 static struct ocp_sock *ocp_sock_bind_list;
+static int ocp_sock_used;
+static int ocp_sock_max;
 
 /* nonstatic debug cmd option, exported in lwipopts.h */
 unsigned char debug_flags = 0;
@@ -241,6 +243,10 @@ static struct ocp_sock *ocp_sock_new(int fd, event_callback_fn cb, int flags)
 	ocp_sock_free_list = s->next;
 	memset(s, 0, sizeof(*s));
 
+	ocp_sock_used++;
+	if (ocp_sock_used > ocp_sock_max)
+		ocp_sock_max = ocp_sock_used;
+
 	s->next = ocp_sock_bind_list;
 	ocp_sock_bind_list = s;
 
@@ -269,6 +275,7 @@ static void ocp_sock_del(struct ocp_sock *s)
 	memset(s, 0xdd, sizeof(*s));
 	s->next = ocp_sock_free_list;
 	ocp_sock_free_list = s;
+	ocp_sock_used--;
 }
 
 /**********************************************************************
@@ -774,6 +781,8 @@ static void cb_housekeeping(evutil_socket_t fd, short what, void *ctx)
 	if (got_sigusr1) {
 		LINK_STATS_DISPLAY();
 		MEM_STATS_DISPLAY();
+		printf("open connections: %d / %d, max %d\n",
+		       ocp_sock_used, MAX_CONN, ocp_sock_max);
 		got_sigusr1 = 0;
 	}
 }
