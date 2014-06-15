@@ -50,7 +50,7 @@ environment variable to tell \fBocproxy\fP how to send and receive
 VPN traffic.  For example:
 
 .RS
-openconnect \-\-script-tun \-\-script "ocproxy -D 11080 -L2222:unix-host:22"
+openconnect \-\-script\-tun \-\-script "ocproxy \-D 11080 \-L2222:unix\-host:22"
 vpn.example.com
 .RE
 
@@ -58,13 +58,13 @@ vpn.example.com
 Commonly used options include:
 
 .TP
-\fB-D, \-\-dynfw\fP \fIport\fP
+\fB\-D, \-\-dynfw\fP \fIport\fP
 Start up a SOCKS5 server on TCP port \fIport\fP to dynamically forward
 application-level traffic over the VPN proxy.  This is intended to
 resemble the \fB-D\fP option to \fBssh\fP(1).
 
 .TP
-\fB-L, \-\-localfw\fP \fIport:host:hostport\fP
+\fB\-L, \-\-localfw\fP \fIport:host:hostport\fP
 Bind to port local TCP port \fIport\fP, and forward incoming connections
 to \fIhost:hostport\fP on the VPN.  \fIhost\fP can be a DNS name or a
 dotted-quad IP address.  If the VPN supplied a default DNS domain name
@@ -72,7 +72,7 @@ or \fB\-\-domain\fP was specified on the command line, unqualified hostnames
 may be used.  This is intended to resemble the \fB-L\fP option to \fBssh\fP(1).
 
 .TP
-\fB-g, \-\-allow\-remote\fP
+\fB\-g, \-\-allow\-remote\fP
 Local listening sockets opened by the \fB\-\-dynfw\fP and \fB\-\-localfw\fP
 options, by default, will be bound to the loopback interface only (127.0.0.1)
 so they are only available on the local machine.  If \fB\-\-allow\-remote\fP
@@ -81,7 +81,7 @@ and other hosts may connect to them.  This is intended to resemble the
 \fB-g\fP option to \fBssh\fP(1).
 
 .TP
-\fB-k, \-\-keepalive\fP \fIinterval\fP
+\fB\-k, \-\-keepalive\fP \fIinterval\fP
 Send a TCP keepalive packet every \fIinterval\fP seconds on each open
 connection, on the VPN side.  This can help avoid idle timeouts, both on
 the VPN gateway and on any stateful firewalls in between the two ends.
