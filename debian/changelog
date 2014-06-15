@@ -1,0 +1,11 @@
+ocproxy (0.2~20140614-1ubuntu1~precise) precise; urgency=low
+
+  * New PPA build.
+
+ -- Kevin Cernekee <cernekee@gmail.com>  Sat, 14 Jun 2014 17:33:23 -0700
+
+ocproxy (1.20121120160713-1) unstable; urgency=low
+
+  * Initial release (Closes: #693792)
+
+ -- David Edmondson <dme@dme.org>  Tue, 20 Nov 2012 16:19:06 +0000
