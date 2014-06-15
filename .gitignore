@@ -27,6 +27,11 @@ ocproxy*.tar.gz.asc
 /TAGS
 /tags
 
+# Debian
+tmp.debian/
+ocproxy*.deb
+lintian.txt
+
 # scratch files
 .*.sw*
 *~
