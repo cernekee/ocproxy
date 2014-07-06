@@ -1,19 +1,21 @@
 Source: ocproxy
 Section: net
 Priority: optional
-Maintainer: David Edmondson <dme@dme.org>
+Maintainer: Kevin Cernekee <cernekee@gmail.com>
 Build-Depends: debhelper (>= 9),
 	       libevent-dev (>= 2.0.16),
 	       dh-autoreconf
 Standards-Version: 3.9.5
-Homepage: http://dme.org/ocproxy
+Homepage: https://github.com/cernekee/ocproxy
+Vcs-Git: git://anonscm.debian.org/collab-maint/ocproxy.git
+Vcs-Browser: http://anonscm.debian.org/gitweb/?p=collab-maint/ocproxy.git
 
 Package: ocproxy
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Recommends: openconnect
-Description: lwip based proxy for openconnect
- ocproxy is a lwip based SOCKS and port-forwarding proxy for use with
+Description: lwIP based proxy for openconnect
+ ocproxy is a lwIP based SOCKS and port-forwarding proxy for use with
  openconnect. It allows a non-administrator to use openconnect without
  the need for tunnel devices. Rather than adding the host machine to
  the network at the other end of the VPN, ocproxy allows a user to
