@@ -67,13 +67,22 @@ should work.  FoxyProxy also allows the user to route requests based on URL
 patterns, so that (for instance) certain domains always use the proxy server
 but all other traffic connects directly.
 
+It is possible to start several different instances of Firefox, each with
+its own separate profile (and hence, proxy settings):
+
+    # initial setup
+    firefox -no-remote -ProfileManager
+
+    # run with previous configured profile "vpn"
+    firefox -no-remote -P vpn
+
 
 Building ocproxy
 ----------------
 
 Dependencies:
 
- * libevent >= 2.0: *.so library and headers
+ * libevent &gt;= 2.0: *.so library and headers
  * autoconf
  * automake
  * gcc, binutils, make, etc.
