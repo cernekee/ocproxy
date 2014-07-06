@@ -1,4 +1,4 @@
-v1.50 - UNRELEASED
+v1.50 - 2014/07/06
 
  - Fix a bunch of stability issues seen under load (web browsing on SOCKS)
 
