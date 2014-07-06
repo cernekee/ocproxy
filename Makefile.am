@@ -112,7 +112,7 @@ bin_PROGRAMS		= ocproxy
 ocproxy_SOURCES		= $(LWIP_SOURCES) $(APP_SOURCES)
 
 dist_man_MANS		= ocproxy.1
-dist_doc_DATA		= README
+dist_doc_DATA		= README.md
 dist_noinst_SCRIPTS	= autogen.sh
 
 EXTRA_DIST		= .gitignore
