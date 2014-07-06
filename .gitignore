@@ -31,6 +31,7 @@ ocproxy*.tar.gz.asc
 tmp.debian/
 ocproxy*.deb
 lintian.txt
+debian/changelog
 
 # scratch files
 .*.sw*
