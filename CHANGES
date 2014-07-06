@@ -1,3 +1,19 @@
-v0.2 - UNRELEASED
+v1.50 - UNRELEASED
+
+ - Fix a bunch of stability issues seen under load (web browsing on SOCKS)
+
+ - Add man page
+
+ - Switch build system to GNU autotools
+
+ - Update to the latest lwIP and fix DNS lookup bugs
+
+ - Delete unused netmask and gateway options
+
+ - Add scripts to build one-off packages for Ubuntu PPA
+
+ - Use Travis CI to run automated builds on each commit
+
+v1.20121120160713 - 2012/11/20
 
  - Initial release.
