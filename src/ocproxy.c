@@ -118,6 +118,7 @@ struct ocp_sock {
 
 	/* for all listeners */
 	int lport;
+	char *bind_addr;
 	evconnlistener_cb listen_cb;
 
 	/* for port forwarding */
@@ -806,10 +807,21 @@ static void bind_all_listeners(void)
 			continue;
 
 		memset(&sock, 0, sizeof(sock));
-		sock.sin_family = AF_INET;
 		sock.sin_port = htons(s->lport);
-		sock.sin_addr.s_addr =
-			htonl(allow_remote ? INADDR_ANY : INADDR_LOOPBACK);
+		sock.sin_family = AF_INET;
+
+		if (s->bind_addr) {
+			/*
+			 * TODO: support IPv6 and multiple listening sockets
+			 * per hostname
+			 */
+			if (!inet_aton(s->bind_addr, &sock.sin_addr))
+				die("can't parse IP: '%s'\n", s->bind_addr);
+
+		} else {
+			sock.sin_addr.s_addr = htonl(allow_remote ?
+				INADDR_ANY : INADDR_LOOPBACK);
+		}
 
 		s->listener = evconnlistener_new_bind(event_base, s->listen_cb,
 			s, LEV_OPT_CLOSE_ON_FREE|LEV_OPT_REUSEABLE, -1,
@@ -858,6 +870,25 @@ static void fwd_add(const char *opt)
 	return;
 bad:
 	die("Invalid port forward specifier: '%s'\n", opt);
+}
+
+static struct ocp_sock *dyn_fwd(const char *arg)
+{
+	struct ocp_sock *s;
+	const char *sep = strrchr(arg, ':');
+
+	if (sep) {
+		/* <addr>:<port> format */
+		s = new_listener(ocp_atoi(sep + 1), new_conn_cb);
+		s->bind_addr = xstrdup(arg);
+		s->bind_addr[sep - arg] = 0;
+	} else {
+		/* <port> only */
+		s = new_listener(ocp_atoi(arg), new_conn_cb);
+	}
+
+	s->conn_type = CONN_TYPE_SOCKS;
+	return s;
 }
 
 static struct option longopts[] = {
@@ -931,8 +962,7 @@ int main(int argc, char **argv)
 			dns_domain = optarg;
 			break;
 		case 'D':
-			s = new_listener(ocp_atoi(optarg), new_conn_cb);
-			s->conn_type = CONN_TYPE_SOCKS;
+			s = dyn_fwd(optarg);
 			break;
 		case 'k':
 			keep_intvl = ocp_atoi(optarg);

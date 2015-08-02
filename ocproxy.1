@@ -58,10 +58,12 @@ vpn.example.com
 Commonly used options include:
 
 .TP
-\fB\-D, \-\-dynfw\fP \fIport\fP
+\fB\-D, \-\-dynfw\fP [\fIbind_address\fP:]\fIport\fP
 Start up a SOCKS5 server on TCP port \fIport\fP to dynamically forward
 application-level traffic over the VPN proxy.  This is intended to
-resemble the \fB-D\fP option to \fBssh\fP(1).
+resemble the \fB-D\fP option to \fBssh\fP(1).  If \fIbind_address\fP is
+unspecified, \fBocproxy\fP will bind to the loopback interface by default
+unless \fB\-\-allow\-remote\fP is used.
 
 .TP
 \fB\-L, \-\-localfw\fP \fIport:host:hostport\fP
