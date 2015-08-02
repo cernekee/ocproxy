@@ -805,6 +805,8 @@ static void bind_all_listeners(void)
 	for (s = ocp_sock_bind_list; s; s = s->next) {
 		if (!s->listen_cb)
 			continue;
+		if (s->lport < 1 || s->lport > 65535)
+			die("invalid port number: %d\n", s->lport);
 
 		memset(&sock, 0, sizeof(sock));
 		sock.sin_port = htons(s->lport);
