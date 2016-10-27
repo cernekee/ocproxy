@@ -8,6 +8,7 @@ AC_GNU_SOURCE
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
 AC_PROG_CC
+AC_CANONICAL_HOST
 AC_CONFIG_FILES([Makefile])
 
 # --enable-debug
@@ -22,6 +23,31 @@ AC_ARG_ENABLE(
 if test "x$enable_debug" = xyes; then
 	CFLAGS="$CFLAGS -O0 -ggdb"
 fi
+
+# --enable-vpnns
+
+case $host_os in
+	*linux*)
+		vpnns_default=yes
+		;;
+	*)
+		vpnns_default=no
+		;;
+esac
+
+AC_ARG_ENABLE(
+	[vpnns],
+	[AS_HELP_STRING([--enable-vpnns],[build vpnns binary (Linux only)])],
+	[enable_vpnns="$enableval"],
+	[enable_vpnns="$vpnns_default"]
+)
+
+if test "x$enable_vpnns" = xyes; then
+	AC_CHECK_HEADERS([linux/if_tun.h sched.h], [],
+			 [AC_MSG_ERROR([Missing headers for vpnns])])
+
+fi
+AM_CONDITIONAL([ENABLE_VPNNS], [test "x$enable_vpnns" = xyes])
 
 EXTRA_PC_LIBS=""
 

@@ -115,6 +115,11 @@ dist_man_MANS		= ocproxy.1
 dist_doc_DATA		= README.md
 dist_noinst_SCRIPTS	= autogen.sh
 
+if ENABLE_VPNNS
+vpnns_SOURCES		= src/vpnns.c
+bin_PROGRAMS		+= vpnns
+endif
+
 EXTRA_DIST		= .gitignore
 DISTCLEANFILES		= *~
 

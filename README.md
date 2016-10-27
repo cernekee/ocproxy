@@ -127,6 +127,52 @@ The `VPNFD` environment variable tells ocproxy which file descriptor is used
 to pass the tunneled traffic.
 
 
+vpnns (experimental)
+--------------------
+
+Another approach to solving this problem is to create a separate network
+namespace (netns).  This is supported by Linux kernels &gt;= v3.8.
+
+This starts up an application in a fresh user/net/uts/mount namespace:
+
+    vpnns -- google-chrome --user-data-dir=/tmp/vpntest
+    
+    vpnns -- transmission-gtk
+
+Initially it will not have any network access as the only interface
+present in the netns is the loopback device.  The application should still
+be able to talk to Xorg through UNIX sockets in /tmp.
+
+The next step is to connect to a VPN and invoke `vpnns --attach` to pass
+the VPN traffic back and forth:
+
+    openconnect --script "vpnns --attach" --script-tun vpn.example.com
+
+    openvpn --script-security 2 --config example.ovpn \
+            --dev "|HOME=$HOME vpnns --attach"
+
+These commands connect to an ocserv or openvpn gateway, then tells vpnns
+to set up a tunnel device, default route, and resolv.conf inside the
+namespace created above.  On success, the web browser will have connectivity.
+
+`vpnns` can be rerun multiple times if the connection fails or if the VPN
+client crashes.  If run without arguments, it will open a shell inside the
+namespace.
+
+Some differences between vpnns and ocproxy:
+
+ * No proxies are involved, so apps should not require any special
+configuration.
+ * vpnns is better-suited to hard-to-proxy protocols such as VOIP or
+BitTorrent.
+ * vpnns will only ever run on Linux.
+ * vpnns may interfere with dbus connections.
+
+Unlike previous approaches to the problem (e.g. anything that involves
+running `ip netns`), vpnns does not require root privileges, changing
+the host network configuration, or any proxy configuration in the app.
+
+
 Credits
 -------
 
