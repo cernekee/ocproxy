@@ -1,6 +1,7 @@
 #!/usr/bin/make -f
 
 export V = 1
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 
 %:
 	dh $@ --with autoreconf
