@@ -154,6 +154,8 @@ the VPN traffic back and forth:
 These commands connect to an ocserv or openvpn gateway, then tell vpnns
 to set up a tunnel device, default route, and resolv.conf inside the
 namespace created above.  On success, the web browser will have connectivity.
+When the VPN disconnects, the browser will lose all connectivity, preventing
+leaks.
 
 `vpnns` can be rerun multiple times if the connection fails or if the VPN
 client crashes.  If run without arguments, it will open a shell inside the
