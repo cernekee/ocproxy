@@ -172,6 +172,18 @@ Unlike previous approaches to the problem (e.g. anything that involves
 running `ip netns`), vpnns does not require root privileges, changing
 the host network configuration, or any proxy configuration in the app.
 
+The `--name` option allows additional (and separate) namespaces to be
+created.
+
+The OpenVPN example requires out-of-tree patches.  Updated openvpn and
+ocproxy packages are available for Ubuntu 14.04 LTS and 16.04 LTS:
+
+    sudo -s
+    apt-get install software-properties-common
+    add-apt-repository --yes ppa:cernekee
+    apt-get update
+    apt-get install ocproxy openvpn
+
 
 Credits
 -------
