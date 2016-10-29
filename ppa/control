@@ -5,7 +5,7 @@ Maintainer: Kevin Cernekee <cernekee@gmail.com>
 Build-Depends: debhelper (>= 9),
 	       libevent-dev (>= 2.0.16),
 	       dh-autoreconf
-Standards-Version: 3.9.5
+Standards-Version: 3.9.7
 Homepage: https://github.com/cernekee/ocproxy
 Vcs-Git: https://anonscm.debian.org/git/collab-maint/ocproxy.git
 Vcs-Browser: https://anonscm.debian.org/gitweb/?p=collab-maint/ocproxy.git
