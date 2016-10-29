@@ -202,7 +202,8 @@ static void create_ns(const char *pidfile, const char *name)
 		    CLONE_NEWUTS | CLONE_NEWUSER) < 0)
 		die("can't unshare namespaces: %s\n", strerror(errno));
 
-	write_file("/proc/self/setgroups", "deny");
+	if (access("/proc/self/setgroups", O_RDONLY) == 0)
+		write_file("/proc/self/setgroups", "deny");
 	snprintf(str, sizeof(str), "0 %d 1", uid);
 	write_file("/proc/self/uid_map", str);
 	snprintf(str, sizeof(str), "0 %d 1", gid);
