@@ -151,7 +151,7 @@ the VPN traffic back and forth:
     openvpn --script-security 2 --config example.ovpn \
             --dev "|HOME=$HOME vpnns --attach"
 
-These commands connect to an ocserv or openvpn gateway, then tells vpnns
+These commands connect to an ocserv or openvpn gateway, then tell vpnns
 to set up a tunnel device, default route, and resolv.conf inside the
 namespace created above.  On success, the web browser will have connectivity.
 
@@ -163,14 +163,14 @@ Some differences between vpnns and ocproxy:
 
  * No proxies are involved, so apps should not require any special
 configuration.
- * vpnns is better-suited to hard-to-proxy protocols such as VOIP or
+ * vpnns is better-suited for hard-to-proxy protocols such as VOIP or
 BitTorrent.
  * vpnns will only ever run on Linux.
  * vpnns may interfere with dbus connections.
 
 Unlike previous approaches to the problem (e.g. anything that involves
-running `ip netns`), vpnns does not require root privileges, changing
-the host network configuration, or any proxy configuration in the app.
+running `ip netns`), vpnns does not require root privileges or changing
+the host network configuration.
 
 The `--name` option allows additional (and separate) namespaces to be
 created.
