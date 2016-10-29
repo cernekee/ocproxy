@@ -72,6 +72,8 @@ AS_COMPILER_FLAGS(WFLAGS,
 AC_SUBST(WFLAGS, [$WFLAGS])
 
 AC_SEARCH_LIBS([event_add], [event])
+AC_CHECK_HEADERS([event2/event.h], [],
+		 [AC_MSG_ERROR([Missing development files for libevent2])])
 
 AX_PTHREAD
 LIBS="$PTHREAD_LIBS $LIBS"
