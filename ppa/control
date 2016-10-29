@@ -7,8 +7,8 @@ Build-Depends: debhelper (>= 9),
 	       dh-autoreconf
 Standards-Version: 3.9.5
 Homepage: https://github.com/cernekee/ocproxy
-Vcs-Git: git://anonscm.debian.org/collab-maint/ocproxy.git
-Vcs-Browser: http://anonscm.debian.org/gitweb/?p=collab-maint/ocproxy.git
+Vcs-Git: https://anonscm.debian.org/git/collab-maint/ocproxy.git
+Vcs-Browser: https://anonscm.debian.org/gitweb/?p=collab-maint/ocproxy.git
 
 Package: ocproxy
 Architecture: any
