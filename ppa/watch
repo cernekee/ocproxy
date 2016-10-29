@@ -1,3 +1,3 @@
 version=3
 
-http://githubredir.debian.net/github/cernekee/ocproxy v(.+).tar.gz
+https://github.com/cernekee/ocproxy/tags .*/(.*)\.tar\.gz
