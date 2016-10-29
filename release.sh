@@ -27,10 +27,10 @@ popd
 mkdir -p $builddir
 pushd $builddir
 tar -zxf $repodir/$tarball --strip 1
-./configure --with-gtk
+./configure --with-vpnns
 make
 make distclean
-./configure --with-gtk --prefix=/ CFLAGS="-Werror"
+./configure --with-vpnns --prefix=/ CFLAGS="-Werror"
 make
 make install DESTDIR=`pwd`/pfx
 make clean
