@@ -176,8 +176,8 @@ the host network configuration, or any proxy configuration in the app.
 Credits
 -------
 
-Original author: David Edmondson <dme@dme.org>
+Original author: David Edmondson &lt;dme@dme.org&gt;
 
-Current maintainer: Kevin Cernekee <cernekee@gmail.com>
+Current maintainer: Kevin Cernekee &lt;cernekee@gmail.com&gt;
 
-Project home page: <https://github.com/cernekee/ocproxy>
+Project home page: https://github.com/cernekee/ocproxy
