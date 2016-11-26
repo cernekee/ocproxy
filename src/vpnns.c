@@ -73,13 +73,27 @@ static void die(const char *fmt, ...)
 	exit(1);
 }
 
-static pid_t read_pid(const char *pidfile)
+static pid_t read_pid(const char *statedir)
 {
+	char *pidfile;
+
+	if (asprintf(&pidfile, "%s/vpnns.pid", statedir) < 0)
+		die("can't allocate memory\n");
+
 	FILE *f = fopen(pidfile, "r");
 	int pid = 0;
 
-	if (!f)
+	free(pidfile);
+	if (!f) {
+		struct stat st;
+		if (stat(statedir, &st) == 0 && !S_ISDIR(st.st_mode)) {
+			printf("'%s' is an old-style pidfile which is unsupported.\n",
+			       statedir);
+			die("Exit all running vpnns instances and remove the file.\n");
+		}
+
 		return -1;
+	}
 	if (fscanf(f, "%d", &pid) != 1 || pid <= 0) {
 		fclose(f);
 		return -1;
@@ -87,6 +101,24 @@ static pid_t read_pid(const char *pidfile)
 
 	fclose(f);
 	return pid;
+}
+
+static void write_pid(const char *statedir, pid_t pid)
+{
+	char *pidfile;
+
+	if (asprintf(&pidfile, "%s/vpnns.pid", statedir) < 0)
+		die("can't allocate memory\n");
+
+	unlink(pidfile);
+	mkdir(statedir, 0755);
+
+	FILE *f = fopen(pidfile, "w");
+
+	if (!f || fprintf(f, "%d\n", (int)pid) < 0)
+		die("error writing to '%s'\n", pidfile);
+	free(pidfile);
+	fclose(f);
 }
 
 static void write_file(const char *file, const char *data)
@@ -192,7 +224,7 @@ static void setup_ipv4(const char *ifname, const char *addr, const char *mask,
 	close(fd);
 }
 
-static void create_ns(const char *pidfile, const char *name)
+static void create_ns(const char *statedir, const char *name)
 {
 	char str[64];
 	uid_t uid = getuid();
@@ -208,16 +240,14 @@ static void create_ns(const char *pidfile, const char *name)
 	write_file("/proc/self/uid_map", str);
 	snprintf(str, sizeof(str), "0 %d 1", gid);
 	write_file("/proc/self/gid_map", str);
-
-	snprintf(str, sizeof(str), "%d\n", getpid());
-	write_file(pidfile, str);
+	write_pid(statedir, getpid());
 
 	if (sethostname(name, strlen(name)) < 0)
 		die("can't set hostname: %s\n", strerror(errno));
 	setup_ipv4("lo", "127.0.0.1", "255.0.0.0", false, 0);
 
 	char *resolv;
-	if (asprintf(&resolv, "%s.dns", pidfile) < 0)
+	if (asprintf(&resolv, "%s/resolv.conf", statedir) < 0)
 		die("can't allocate memory\n");
 
 	unlink(resolv);
@@ -228,7 +258,6 @@ static void create_ns(const char *pidfile, const char *name)
 
 	if (mount(resolv, "/etc/resolv.conf", NULL, MS_BIND, NULL) < 0)
 		die("can't mount resolv.conf: %s\n", strerror(errno));
-	unlink(resolv);
 	free(resolv);
 }
 
@@ -257,16 +286,16 @@ static int run(char *file, char **argv)
 		return WEXITSTATUS(rv);
 }
 
-static int do_create(const char *pidfile, const char *name,
+static int do_create(const char *statedir, const char *name,
 		     int argc, char **argv)
 {
-	pid_t pid = read_pid(pidfile);
+	pid_t pid = read_pid(statedir);
 
 	if (pid > 0) {
 		if (enter_all(pid) < 0)
-			create_ns(pidfile, name);
+			create_ns(statedir, name);
 	} else {
-		create_ns(pidfile, name);
+		create_ns(statedir, name);
 	}
 
 	int rv;
@@ -279,10 +308,6 @@ static int do_create(const char *pidfile, const char *name,
 	} else {
 		rv = run(argv[0], argv);
 	}
-
-	/* Unlink if we're the creator */
-	if (pid < 0)
-		unlink(pidfile);
 
 	return rv == -1 ? 1 : WEXITSTATUS(rv);
 }
@@ -398,12 +423,12 @@ static void setup_ip_from_env(const char *ifname)
 		die("error writing to resolv.conf\n");
 }
 
-static int do_attach(const char *pidfile, const char *script)
+static int do_attach(const char *statedir, const char *script)
 {
-	pid_t pid = read_pid(pidfile);
+	pid_t pid = read_pid(statedir);
 
 	if (pid < 0)
-		die("can't open pidfile '%s'\n", pidfile);
+		die("can't open pidfile in '%s'\n", statedir);
 	else {
 		if (enter_all(pid) < 0)
 			die("can't attach to pid %d\n", pid);
@@ -487,7 +512,7 @@ static struct option longopts[] = {
 int main(int argc, char **argv)
 {
 	int rv;
-	char *name = DEFAULT_NAME, *pidfile;
+	char *name = DEFAULT_NAME, *statedir;
 	char *script = NULL;
 	bool attach = false;
 
@@ -516,11 +541,11 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (asprintf(&pidfile, "%s/.vpnns-%s", getenv("HOME"), name) < 0)
+	if (asprintf(&statedir, "%s/.vpnns-%s", getenv("HOME"), name) < 0)
 		die("can't allocate memory\n");
 
 	if (attach)
-		return do_attach(pidfile, script);
+		return do_attach(statedir, script);
 	else
-		return do_create(pidfile, name, argc - optind, &argv[optind]);
+		return do_create(statedir, name, argc - optind, &argv[optind]);
 }
