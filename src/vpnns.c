@@ -224,6 +224,32 @@ static void setup_ipv4(const char *ifname, const char *addr, const char *mask,
 	close(fd);
 }
 
+static char *populate_statedir(const char *statedir, const char *file,
+			       bool is_directory)
+{
+	char *path;
+
+	if (asprintf(&path, "%s/%s", statedir, file) < 0)
+		die("can't allocate memory\n");
+
+	if (is_directory) {
+		struct stat st;
+		if (mkdir(path, 0755) < 0 &&
+		    stat(path, &st) == 0 &&
+		    !S_ISDIR(st.st_mode)) {
+			die("can't create directory '%s': %s\n", path,
+			    strerror(errno));
+		}
+	} else {
+		unlink(path);
+		int fd = open(path, O_WRONLY | O_CREAT, 0644);
+		if (fd < 0)
+			die("can't create '%s': %s\n", path, strerror(errno));
+		close(fd);
+	}
+	return path;
+}
+
 static void create_ns(const char *statedir, const char *name)
 {
 	char str[64];
@@ -246,19 +272,25 @@ static void create_ns(const char *statedir, const char *name)
 		die("can't set hostname: %s\n", strerror(errno));
 	setup_ipv4("lo", "127.0.0.1", "255.0.0.0", false, 0);
 
-	char *resolv;
-	if (asprintf(&resolv, "%s/resolv.conf", statedir) < 0)
+	char *local_etc = populate_statedir(statedir, "etc", true);
+	char *workdir = populate_statedir(statedir, "workdir", true);
+	char *resolv = populate_statedir(statedir, "etc/resolv.conf", false);
+
+	char *mount_opts;
+	if (asprintf(&mount_opts, "lowerdir=/etc,upperdir=%s,workdir=%s",
+		     local_etc, workdir) < 0) {
 		die("can't allocate memory\n");
+	}
 
-	unlink(resolv);
-	int fd = open(resolv, O_WRONLY | O_CREAT, 0644);
-	if (fd < 0)
-		die("can't create local resolv.conf: %s\n", strerror(errno));
-	close(fd);
+	if (mount("overlay", "/etc", "overlay", 0, mount_opts) < 0 &&
+	    mount(resolv, "/etc/resolv.conf", NULL, MS_BIND, NULL) < 0) {
+		printf("warning: unable to bind mount '%s'\n", resolv);
+	}
 
-	if (mount(resolv, "/etc/resolv.conf", NULL, MS_BIND, NULL) < 0)
-		die("can't mount resolv.conf: %s\n", strerror(errno));
+	free(mount_opts);
 	free(resolv);
+	free(workdir);
+	free(local_etc);
 }
 
 static int run(char *file, char **argv)
