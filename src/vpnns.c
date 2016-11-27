@@ -39,15 +39,20 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <event2/buffer.h>
+#include <event2/bufferevent.h>
 #include <event2/event.h>
+#include <event2/listener.h>
 #include <linux/if_tun.h>
 #include <net/if.h>
 #include <net/route.h>
 #include <sys/fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/mount.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/un.h>
 #include <sys/utsname.h>
 #include <sys/wait.h>
 
@@ -63,6 +68,11 @@ struct packet_loop_ctx {
 	int tun_fd;
 };
 
+struct watcher_ctx {
+	struct event_base *event_base;
+	int refcount;
+};
+
 static void die(const char *fmt, ...)
 {
 	va_list ap;
@@ -70,6 +80,7 @@ static void die(const char *fmt, ...)
 	va_start(ap, fmt);
 	vprintf(fmt, ap);
 	va_end(ap);
+
 	exit(1);
 }
 
@@ -111,14 +122,16 @@ static void write_pid(const char *statedir, pid_t pid)
 		die("can't allocate memory\n");
 
 	unlink(pidfile);
-	mkdir(statedir, 0755);
 
-	FILE *f = fopen(pidfile, "w");
+	if (pid > 0) {
+		mkdir(statedir, 0755);
 
-	if (!f || fprintf(f, "%d\n", (int)pid) < 0)
-		die("error writing to '%s'\n", pidfile);
+		FILE *f = fopen(pidfile, "w");
+		if (!f || fprintf(f, "%d\n", (int)pid) < 0)
+			die("error writing to '%s'\n", pidfile);
+		fclose(f);
+	}
 	free(pidfile);
-	fclose(f);
 }
 
 static void write_file(const char *file, const char *data)
@@ -153,14 +166,14 @@ static int enter_ns(pid_t pid, const char *ns_str, int nstype)
 	return 0;
 }
 
-static int enter_all(pid_t pid)
+static void enter_all(pid_t pid)
 {
 	if (enter_ns(pid, "user", CLONE_NEWUSER) ||
 	    enter_ns(pid, "uts", CLONE_NEWUTS) ||
 	    enter_ns(pid, "net", CLONE_NEWNET) ||
 	    enter_ns(pid, "mnt", CLONE_NEWNS))
-		return -1;
-	return 0;
+		die("can't set namespace with pid %d: %s\n",
+		    (int)pid, strerror(errno));
 }
 
 static void setup_ipv4(const char *ifname, const char *addr, const char *mask,
@@ -250,6 +263,121 @@ static char *populate_statedir(const char *statedir, const char *file,
 	return path;
 }
 
+static void watcher_conn_closed(struct bufferevent *bev,
+				short events, void *vctx)
+{
+	struct watcher_ctx *ctx = vctx;
+
+	bufferevent_free(bev);
+	if (--ctx->refcount == 0)
+		event_base_loopexit(ctx->event_base, NULL);
+}
+
+static void watcher_new_conn(struct evconnlistener *listener,
+			     evutil_socket_t fd, struct sockaddr *address,
+			     int socklen, void *vctx)
+{
+	struct watcher_ctx *ctx = vctx;
+	struct bufferevent *bev;
+
+	ctx->refcount++;
+	bev = bufferevent_socket_new(ctx->event_base, fd,
+				     BEV_OPT_CLOSE_ON_FREE);
+	bufferevent_setcb(bev, NULL, NULL, watcher_conn_closed, vctx);
+	bufferevent_enable(bev, EV_READ | EV_WRITE);
+}
+
+static void write_socket_path(const char *statedir,
+			      struct sockaddr_un *sockaddr)
+{
+	memset(sockaddr, 0, sizeof(*sockaddr));
+	sockaddr->sun_family = AF_UNIX;
+
+	if (snprintf(sockaddr->sun_path, sizeof(sockaddr->sun_path),
+		     "%s/watcher", statedir) >= sizeof(sockaddr->sun_path))
+		die("path too long: '%s'\n", statedir);
+}
+
+static pid_t create_watcher(const char *statedir)
+{
+	pid_t pid = fork();
+	if (pid < 0)
+		die("fork failed: %s\n", strerror(errno));
+	else if (pid > 0)
+		return pid;
+
+	/* Daemonize */
+	int i, fd_max = getdtablesize();
+	for (i = 0; i < fd_max; i++)
+		close(i);
+	open("/dev/null", O_RDONLY);
+	open("/dev/null", O_RDONLY);
+	open("/dev/null", O_RDONLY);
+
+	setsid();
+	setpgid(0, 0);
+	if (chdir("/") < 0) {
+		/* ignore */
+	}
+
+	/*
+	 * The process that started the watcher is the first "client."
+	 * Increment the refcount on every SIGUSR1; decrement on SIGUSR2.
+	 * If we reach 0 clients, delete the pidfile and exit.
+	 */
+	struct watcher_ctx ctx = {0};
+
+	ctx.event_base = event_base_new();
+	if (!ctx.event_base)
+		die("can't initialize libevent\n");
+
+	struct sockaddr_un sockaddr;
+	write_socket_path(statedir, &sockaddr);
+	unlink(sockaddr.sun_path);
+
+	struct evconnlistener *listener;
+	listener = evconnlistener_new_bind(ctx.event_base, watcher_new_conn,
+		&ctx, LEV_OPT_CLOSE_ON_FREE | LEV_OPT_REUSEABLE, -1,
+		(struct sockaddr *)&sockaddr, sizeof(sockaddr));
+	if (!listener)
+		die("cannot create socket listener\n");
+
+	/* Wait for refcount to reach 0 */
+	event_base_dispatch(ctx.event_base);
+
+	/* Delete pidfile */
+	write_pid(statedir, 0);
+
+	event_base_free(ctx.event_base);
+	_exit(0);
+}
+
+static int connect_to_watcher(const char *statedir)
+{
+	struct sockaddr_un sockaddr;
+	write_socket_path(statedir, &sockaddr);
+
+	int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (fd < 0)
+		die("socket() failed: %s\n", strerror(errno));
+
+	int i;
+	for (i = 0; i < 5; i++) {
+		if (connect(fd, (struct sockaddr *)&sockaddr,
+		    sizeof(sockaddr)) == 0) {
+			return fd;
+		}
+		/*
+		 * Try again; we might be racing with the child process.
+		 * (This could be fixed, but it's probably more trouble
+		 * than it's worth.)
+		 */
+		sleep(1);
+	}
+
+	die("can't connect to watcher in '%s'\n", statedir);
+}
+
 static void create_ns(const char *statedir, const char *name)
 {
 	char str[64];
@@ -266,7 +394,7 @@ static void create_ns(const char *statedir, const char *name)
 	write_file("/proc/self/uid_map", str);
 	snprintf(str, sizeof(str), "0 %d 1", gid);
 	write_file("/proc/self/gid_map", str);
-	write_pid(statedir, getpid());
+	write_pid(statedir, create_watcher(statedir));
 
 	if (sethostname(name, strlen(name)) < 0)
 		die("can't set hostname: %s\n", strerror(errno));
@@ -293,15 +421,32 @@ static void create_ns(const char *statedir, const char *name)
 	free(local_etc);
 }
 
+static int enter_or_create_ns(const char *statedir, const char *name)
+{
+	int fd;
+
+	pid_t pid = read_pid(statedir);
+	if (pid <= 0 || kill(pid, 0)) {
+		create_ns(statedir, name);
+		fd = connect_to_watcher(statedir);
+	} else {
+		/* Prevent destroy/join races by connecting first */
+		fd = connect_to_watcher(statedir);
+		enter_all(pid);
+	}
+
+	return fd;
+}
+
 static int run(char *file, char **argv)
 {
 	pid_t pid = fork();
-	int rv;
+	int rv = 0;
 
 	if (pid < 0)
 		die("can't fork: %s\n", strerror(errno));
 	else if (pid > 0)
-		wait(&rv);
+		waitpid(pid, &rv, 0);
 	else {
 		if (argv)
 			execvp(file, argv);
@@ -318,17 +463,10 @@ static int run(char *file, char **argv)
 		return WEXITSTATUS(rv);
 }
 
-static int do_create(const char *statedir, const char *name,
-		     int argc, char **argv)
+static int do_app(const char *statedir, const char *name,
+		  int argc, char **argv)
 {
-	pid_t pid = read_pid(statedir);
-
-	if (pid > 0) {
-		if (enter_all(pid) < 0)
-			create_ns(statedir, name);
-	} else {
-		create_ns(statedir, name);
-	}
+	int watcher_conn = enter_or_create_ns(statedir, name);
 
 	int rv;
 	if (argc == 0) {
@@ -341,6 +479,7 @@ static int do_create(const char *statedir, const char *name,
 		rv = run(argv[0], argv);
 	}
 
+	close(watcher_conn);
 	return rv == -1 ? 1 : WEXITSTATUS(rv);
 }
 
@@ -360,7 +499,7 @@ static void write_pkt(evutil_socket_t in_fd, short what, void *vctx)
 		fprintf(stderr, "bad write on fd %d->%d\n", in_fd, out_fd);
 }
 
-static void handle_sig(evutil_socket_t in_fd, short what, void *vctx)
+static void pkt_loop_signal(evutil_socket_t in_fd, short what, void *vctx)
 {
 	struct packet_loop_ctx *ctx = vctx;
 	event_base_loopexit(ctx->event_base, NULL);
@@ -387,7 +526,7 @@ static void do_packet_loop(int vpn_fd, int tun_fd)
 	ctx.tun_event = event_new(ctx.event_base, tun_fd, EV_READ | EV_PERSIST,
 				  &write_pkt, &ctx);
 	ctx.sig_event = event_new(ctx.event_base, SIGHUP, EV_SIGNAL,
-				  &handle_sig, &ctx);
+				  &pkt_loop_signal, &ctx);
 
 	if (!ctx.vpn_event || !ctx.tun_event || !ctx.sig_event)
 		die("can't create event structs\n");
@@ -455,16 +594,9 @@ static void setup_ip_from_env(const char *ifname)
 		die("error writing to resolv.conf\n");
 }
 
-static int do_attach(const char *statedir, const char *script)
+static int do_attach(const char *statedir, const char *name, const char *script)
 {
-	pid_t pid = read_pid(statedir);
-
-	if (pid < 0)
-		die("can't open pidfile in '%s'\n", statedir);
-	else {
-		if (enter_all(pid) < 0)
-			die("can't attach to pid %d\n", pid);
-	}
+	int watcher_conn = enter_or_create_ns(statedir, name);
 
 	int tun_fd = open("/dev/net/tun", O_RDWR);
 	if (tun_fd < 0)
@@ -503,6 +635,7 @@ static int do_attach(const char *statedir, const char *script)
 
 	/* This automatically deletes the tun0 device. */
 	close(tun_fd);
+	close(watcher_conn);
 
 	return 0;
 }
@@ -577,7 +710,7 @@ int main(int argc, char **argv)
 		die("can't allocate memory\n");
 
 	if (attach)
-		return do_attach(statedir, script);
+		return do_attach(statedir, name, script);
 	else
-		return do_create(statedir, name, argc - optind, &argv[optind]);
+		return do_app(statedir, name, argc - optind, &argv[optind]);
 }
