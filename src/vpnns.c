@@ -168,12 +168,23 @@ static int enter_ns(pid_t pid, const char *ns_str, int nstype)
 
 static void enter_all(pid_t pid)
 {
+	char *pwd;
+
+	pwd = get_current_dir_name();
+	if (!pwd)
+		die("can't get current directory: %s\n", strerror(errno));
+
 	if (enter_ns(pid, "user", CLONE_NEWUSER) ||
 	    enter_ns(pid, "uts", CLONE_NEWUTS) ||
 	    enter_ns(pid, "net", CLONE_NEWNET) ||
 	    enter_ns(pid, "mnt", CLONE_NEWNS))
 		die("can't set namespace with pid %d: %s\n",
 		    (int)pid, strerror(errno));
+
+	if (chdir(pwd) < 0)
+		die("can't set current directory: %s\n", strerror(errno));
+
+	free(pwd);
 }
 
 static void setup_ipv4(const char *ifname, const char *addr, const char *mask,
