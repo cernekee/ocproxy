@@ -80,6 +80,17 @@ on network connection changes, the bind mount used by \fBvpnns\fP to
 override the DNS configuration can be inadvertently deleted.  \fBvpnns\fP
 attempts to work around this by using overlayfs to override
 \fI/etc/resolv.conf\fP, but that does not work on all systems.
+.PP
+Some distributions patch their kernels to prevent unprivileged users from
+creating namespaces, resulting in a "can't unshare namespaces: Operation not
+permitted" error.  This security feature can be disabled using the following
+command:
+.RS
+.PP
+sudo sysctl \-w kernel.unprivileged_userns_clone=1
+.RE
+.PP
+To make the change permanent, edit \fI/etc/sysctl.conf\fP.
 .SH FILES
 .TP
 ~/.vpnns\-\fIidentifier\fP
