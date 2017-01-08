@@ -1,0 +1,91 @@
+.TH VPNNS 1 "January 8, 2017"
+.SH NAME
+vpnns \- per\-app VPN using namespaces
+.SH SYNOPSIS
+\fBvpnns\fP [\fB\-\-name\fP=\fIidentifier\fP] \fB\-\-\fP \fIcommand\fP
+.PP
+\fBvpnns\fP [\fB\-\-name\fP=\fIidentifier\fP] [\fB\-\-script\fP=\fIpath\fP]
+\fB\-\-attach\fP
+.SH DESCRIPTION
+.PP
+\fBvpnns\fP isolates VPN\-related network traffic and
+applications inside a separate network namespace.  Applications intended
+to be used with the VPN cannot bypass the VPN to access the internet
+directly, and applications not intended to be used with the VPN cannot
+send traffic through the VPN tunnel.
+.SH USAGE
+.PP
+This starts up an application in a fresh user/net/uts/mount namespace:
+.RS
+.PP
+vpnns \-\- google\-chrome \-\-user\-data\-dir=/tmp/vpntest
+.PP
+vpnns \-\- firefox \-no\-remote \-P vpn
+.PP
+vpnns \-\- transmission\-gtk
+.RE
+.PP
+Initially it will not have any network access as the only interface
+present in the netns is the loopback device.  The application should still
+be able to talk to Xorg through UNIX sockets in \fI/tmp\fP.
+.PP
+The next step is to connect to a VPN and invoke \fBvpnns \-\-attach\fP
+to pass the VPN traffic back and forth:
+.RS
+.PP
+openconnect \-\-script "vpnns \-\-attach" \-\-script\-tun vpn.example.com
+.PP
+openvpn \-\-script\-security 2 \-\-config example.ovpn
+\-\-dev "|HOME=$HOME vpnns \-\-attach"
+.RE
+.PP
+These commands connect to an ocserv or openvpn gateway, then tell \fBvpnns\fP
+to set up a tunnel device, default route, and resolv.conf inside the
+namespace created above.  On success, the web browser will have connectivity.
+When the VPN disconnects, the browser will lose all connectivity, preventing
+leaks.
+.PP
+\fBvpnns\fP can be rerun multiple times if the connection fails or if the VPN
+client crashes.  If run without arguments, it will open a shell inside the
+namespace.
+.PP
+.SH OPTIONS
+.TP
+\fB\-n, \-\-name\fP \fIidentifier\fP
+\fBvpnns\fP is designed to allow multiple instances to coexist on the same
+system.  This feature could be useful for connecting to multiple VPNs at
+the same time.  \fIidentifier\fP defaults to "default" but can be overridden
+through the \fB\-\-name\fP option.
+.TP
+\fB\-s, \-\-script\fP \fIpath\fP
+Invoke the program at \fIpath\fP to set up and tear down the tunnel device's
+IP configuration, instead of letting \fBvpnns\fP handle it internally.
+\fB$TUNDEV\fP will be set to the device name (e.g. \fItun0\fP).
+\fB$reason\fP will be set to either \fBconnect\fP or \fBdisconnect\fP.
+Any IP configuration variables such as \fB$INTERNAL_IP4_ADDRESS\fP set
+by the VPN client will be inherited, so it is possible for a modified
+\fBvpnc\-script\fP to be used.  This option only has an effect if
+\fB\-\-attach\fP is also specified.
+.SH CAVEATS
+.PP
+\fBvpnns\fP is not a security tool.  It cannot prevent malicious applications
+from bypassing the namespace restrictions.
+.PP
+While OpenConnect works with \fBvpnns\fP out of the box, OpenVPN currently
+(as of 2017\-01\-08) requires out\-of\-tree patches to support non\-root
+operation.
+.PP
+If \fI/etc/resolv.conf\fP is a symbolic link to a file that is regenerated
+on network connection changes, the bind mount used by \fBvpnns\fP to
+override the DNS configuration can be inadvertently deleted.  \fBvpnns\fP
+attempts to work around this by using overlayfs to override
+\fI/etc/resolv.conf\fP, but that does not work on all systems.
+.SH FILES
+.TP
+~/.vpnns\-\fIidentifier\fP
+State directory for a given \fBvpnns\fP instance.  By default, \fBvpnns\fP
+uses \fI~/.vpnns\-default\fP.
+.SH SEE ALSO
+.BR ocproxy (1),
+.BR openconnect (8),
+.BR openvpn (8)

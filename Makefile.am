@@ -112,12 +112,13 @@ bin_PROGRAMS		= ocproxy
 ocproxy_SOURCES		= $(LWIP_SOURCES) $(APP_SOURCES)
 
 dist_man_MANS		= ocproxy.1
-dist_doc_DATA		= README.md
+dist_doc_DATA		= README.md CHANGES
 dist_noinst_SCRIPTS	= autogen.sh
 
 if ENABLE_VPNNS
 vpnns_SOURCES		= src/vpnns.c
 bin_PROGRAMS		+= vpnns
+dist_man_MANS		+= vpnns.1
 endif
 
 EXTRA_DIST		= .gitignore

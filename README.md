@@ -137,6 +137,8 @@ This starts up an application in a fresh user/net/uts/mount namespace:
 
     vpnns -- google-chrome --user-data-dir=/tmp/vpntest
     
+    vpnns -- firefox -no-remote -P vpn
+
     vpnns -- transmission-gtk
 
 Initially it will not have any network access as the only interface
