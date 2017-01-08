@@ -1,18 +1,16 @@
 Source: ocproxy
+Maintainer: Kevin Cernekee <cernekee@gmail.com>
 Section: net
 Priority: optional
-Maintainer: Kevin Cernekee <cernekee@gmail.com>
-Build-Depends: debhelper (>= 9),
-	       libevent-dev (>= 2.0.16),
-	       dh-autoreconf
+Build-Depends: debhelper (>= 9), dh-autoreconf, libevent-dev
 Standards-Version: 3.9.8
-Homepage: https://github.com/cernekee/ocproxy
+Vcs-Browser: https://anonscm.debian.org/cgit/collab-maint/ocproxy.git
 Vcs-Git: https://anonscm.debian.org/git/collab-maint/ocproxy.git
-Vcs-Browser: https://anonscm.debian.org/gitweb/?p=collab-maint/ocproxy.git
+Homepage: https://github.com/cernekee/ocproxy
 
 Package: ocproxy
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
 Recommends: openconnect
 Description: lwIP based proxy for openconnect
  ocproxy is a lwIP based SOCKS and port-forwarding proxy for use with
