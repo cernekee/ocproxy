@@ -1,4 +1,6 @@
-UNRELEASED - 2016/10/26
+v1.60 - 2017/01/08
+
+ - Allow specifying the local SOCKS address via "-D <addr>:<port>".
 
  - Add experimental vpnns program
 
