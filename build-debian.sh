@@ -83,6 +83,11 @@ if [ "$dist" = "Ubuntu" ]; then
 		--newversion "${uver}~${codename}" \
 		--distribution $codename \
 		"New PPA build."
+elif [ ! -e ppa/changelog ]; then
+	dch --create --changelog ppa/changelog --package $pkg \
+		--newversion "${ver}-1" \
+		--distribution unstable \
+		"Test build. (Closes: #12345)"
 fi
 
 build_one ""
