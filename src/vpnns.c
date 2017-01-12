@@ -47,6 +47,7 @@
 #include <net/if.h>
 #include <net/route.h>
 #include <sys/fcntl.h>
+#include <sys/inotify.h>
 #include <sys/ioctl.h>
 #include <sys/mount.h>
 #include <sys/socket.h>
@@ -58,6 +59,7 @@
 
 #define DEFAULT_NAME		"default"
 #define DEFAULT_DNS_LIST	"8.8.8.8 8.8.4.4"
+#define RESOLV_CONF		"/etc/resolv.conf"
 
 #ifdef __GNUC__
 #define __printf_attr __attribute__((format (printf, 1, 2)))
@@ -77,6 +79,11 @@ struct packet_loop_ctx {
 struct watcher_ctx {
 	struct event_base *event_base;
 	int refcount;
+
+	/* For tracking resolv.conf changes. */
+	int inotify_fd;
+	int inotify_wd;
+	const char *resolv;
 };
 
 static void __printf_attr die(const char *fmt, ...)
@@ -142,8 +149,6 @@ static void write_pid(const char *statedir, pid_t pid)
 	unlink(pidfile);
 
 	if (pid > 0) {
-		mkdir(statedir, 0755);
-
 		FILE *f = fopen(pidfile, "w");
 		if (!f || fprintf(f, "%d\n", (int)pid) < 0)
 			die("error writing to '%s'\n", pidfile);
@@ -312,6 +317,60 @@ static void watcher_new_conn(struct evconnlistener *listener,
 	bufferevent_enable(bev, EV_READ | EV_WRITE);
 }
 
+static int watch_and_bind_mount(int inotify_fd, const char *resolv)
+{
+	int inotify_wd;
+
+	inotify_wd = inotify_add_watch(inotify_fd, RESOLV_CONF, IN_DELETE_SELF);
+	if (inotify_wd < 0)
+		return -1;
+
+	/* |RESOLV_CONF| can disappear between inotify_add_watch and mount */
+	if (mount(resolv, RESOLV_CONF, NULL, MS_BIND, NULL) < 0) {
+		inotify_rm_watch(inotify_fd, inotify_wd);
+		return -1;
+	}
+
+	return inotify_wd;
+}
+
+static void watcher_check_resolv(evutil_socket_t fd, short events, void *vctx)
+{
+	struct watcher_ctx *ctx = vctx;
+
+	ctx->inotify_wd = watch_and_bind_mount(ctx->inotify_fd, ctx->resolv);
+	if (ctx->inotify_wd >= 0)
+		return;
+
+	/* Check again in one second. */
+	struct event *ev;
+	struct timeval tv = {1, 0};
+	ev = evtimer_new(ctx->event_base, &watcher_check_resolv, vctx);
+	evtimer_add(ev, &tv);
+}
+
+static void watcher_inotify(struct bufferevent *bev, void *vctx)
+{
+	struct watcher_ctx *ctx = vctx;
+	struct inotify_event ev;
+
+	/*
+	 * Discard the event(s) and wait for resolv.conf to rematerialize.
+	 * Note that upon deletion, the kernel will generate both
+	 * IN_DELETE_SELF and IN_IGNORED events.
+	 */
+	while (1) {
+		size_t bytes = bufferevent_read(bev, &ev, sizeof(ev));
+		if (bytes == 0)
+			break;
+		else if (bytes != sizeof(ev))
+			die("bad inotify event: %zu bytes\n", bytes);
+
+		if (ev.wd == ctx->inotify_wd && ev.mask & IN_DELETE_SELF)
+			watcher_check_resolv(-1, 0, vctx);
+	}
+}
+
 static void write_socket_path(const char *statedir,
 			      struct sockaddr_un *sockaddr)
 {
@@ -323,7 +382,10 @@ static void write_socket_path(const char *statedir,
 		die("path too long: '%s'\n", statedir);
 }
 
-static pid_t create_watcher(const char *statedir)
+static pid_t create_watcher(const char *statedir,
+			    const char *resolv,
+			    int inotify_fd,
+			    int inotify_wd)
 {
 	pid_t pid = fork();
 	if (pid < 0)
@@ -333,8 +395,10 @@ static pid_t create_watcher(const char *statedir)
 
 	/* Daemonize */
 	int i, fd_max = getdtablesize();
-	for (i = 0; i < fd_max; i++)
-		close(i);
+	for (i = 0; i < fd_max; i++) {
+		if (i != inotify_fd)
+			close(i);
+	}
 	open("/dev/null", O_RDONLY);
 	open("/dev/null", O_RDONLY);
 	open("/dev/null", O_RDONLY);
@@ -366,6 +430,18 @@ static pid_t create_watcher(const char *statedir)
 		(struct sockaddr *)&sockaddr, sizeof(sockaddr));
 	if (!listener)
 		die("cannot create socket listener\n");
+
+	if (inotify_fd >= 0) {
+		ctx.resolv = resolv;
+		ctx.inotify_fd = inotify_fd;
+		ctx.inotify_wd = inotify_wd;
+
+		struct bufferevent *bev;
+		bev = bufferevent_socket_new(ctx.event_base, ctx.inotify_fd,
+					     BEV_OPT_CLOSE_ON_FREE);
+		bufferevent_setcb(bev, watcher_inotify, NULL, NULL, &ctx);
+		bufferevent_enable(bev, EV_READ);
+	}
 
 	/* Wait for refcount to reach 0 */
 	event_base_dispatch(ctx.event_base);
@@ -419,12 +495,12 @@ static void create_ns(const char *statedir, const char *name)
 	write_file("/proc/self/uid_map", str);
 	snprintf(str, sizeof(str), "0 %d 1", gid);
 	write_file("/proc/self/gid_map", str);
-	write_pid(statedir, create_watcher(statedir));
 
 	if (sethostname(name, strlen(name)) < 0)
 		pdie("can't set hostname");
 	setup_ipv4("lo", "127.0.0.1", "255.0.0.0", false, 0);
 
+	mkdir(statedir, 0755);
 	char *local_etc = populate_statedir(statedir, "etc", true);
 	char *workdir = populate_statedir(statedir, "workdir", true);
 	char *resolv = populate_statedir(statedir, "etc/resolv.conf", false);
@@ -435,10 +511,28 @@ static void create_ns(const char *statedir, const char *name)
 		die("can't allocate memory\n");
 	}
 
-	if (mount("overlay", "/etc", "overlay", 0, mount_opts) < 0 &&
-	    mount(resolv, "/etc/resolv.conf", NULL, MS_BIND, NULL) < 0) {
-		printf("warning: unable to bind mount '%s'\n", resolv);
+	/*
+	 * overlayfs is only usable on patched kernels (e.g. Ubuntu) due to
+	 * permission checks, but it is the cleanest solution because it
+	 * overrides symlinks.  If we have to use bind mounts instead,
+	 * tell the watcher process to re-create the bind mount if
+	 * resolv.conf gets deleted.
+	 */
+	int inotify_fd = -1, inotify_wd = -1;
+	if (mount("overlay", "/etc", "overlay", 0, mount_opts) == 0) {
+		/* pass through */
+	} else {
+		inotify_fd = inotify_init();
+		if (inotify_fd < 0)
+			pdie("can't create inotify socket");
+
+		inotify_wd = watch_and_bind_mount(inotify_fd, resolv);
+		if (inotify_wd < 0)
+			die("can't watch resolv.conf\n");
 	}
+	write_pid(statedir, create_watcher(statedir, resolv,
+					   inotify_fd, inotify_wd));
+	close(inotify_fd);
 
 	free(mount_opts);
 	free(resolv);
@@ -590,7 +684,7 @@ static void setup_ip_from_env(const char *ifname)
 	if (!val)
 		val = DEFAULT_DNS_LIST;
 
-	FILE *f = fopen("/etc/resolv.conf", "w");
+	FILE *f = fopen(RESOLV_CONF, "w");
 
 	if (!f)
 		die("can't open /etc/resolv.conf for writing\n");
