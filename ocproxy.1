@@ -69,9 +69,10 @@ unless \fB\-\-allow\-remote\fP is used.
 \fB\-L, \-\-localfw\fP \fIport:host:hostport\fP
 Bind to port local TCP port \fIport\fP, and forward incoming connections
 to \fIhost:hostport\fP on the VPN.  \fIhost\fP can be a DNS name or a
-dotted-quad IP address.  If the VPN supplied a default DNS domain name
-or \fB\-\-domain\fP was specified on the command line, unqualified hostnames
-may be used.  This is intended to resemble the \fB-L\fP option to \fBssh\fP(1).
+dotted-quad IP address.  Do not use \fBlocalhost\fP.  If the VPN supplied
+a default DNS domain name or \fB\-\-domain\fP was specified on the command
+line, unqualified hostnames may be used.  This is intended to resemble the
+\fB-L\fP option to \fBssh\fP(1).
 
 .TP
 \fB\-g, \-\-allow\-remote\fP
