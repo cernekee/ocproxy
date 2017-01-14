@@ -383,6 +383,7 @@ static void write_socket_path(const char *statedir,
 }
 
 static pid_t create_watcher(const char *statedir,
+			    int conn_fd,
 			    const char *resolv,
 			    int inotify_fd,
 			    int inotify_wd)
@@ -396,7 +397,7 @@ static pid_t create_watcher(const char *statedir,
 	/* Daemonize */
 	int i, fd_max = getdtablesize();
 	for (i = 0; i < fd_max; i++) {
-		if (i != inotify_fd)
+		if (i != inotify_fd && i != conn_fd)
 			close(i);
 	}
 	open("/dev/null", O_RDONLY);
@@ -431,6 +432,8 @@ static pid_t create_watcher(const char *statedir,
 	if (!listener)
 		die("cannot create socket listener\n");
 
+	watcher_new_conn(listener, conn_fd, NULL, 0, &ctx);
+
 	if (inotify_fd >= 0) {
 		ctx.resolv = resolv;
 		ctx.inotify_fd = inotify_fd;
@@ -462,24 +465,19 @@ static int connect_to_watcher(const char *statedir)
 	if (fd < 0)
 		pdie("socket() failed");
 
-	int i;
-	for (i = 0; i < 5; i++) {
-		if (connect(fd, (struct sockaddr *)&sockaddr,
-		    sizeof(sockaddr)) == 0) {
-			return fd;
+	if (connect(fd, (struct sockaddr *)&sockaddr, sizeof(sockaddr)) < 0) {
+		if (errno == ECONNREFUSED) {
+			close(fd);
+			return -1;
+		} else {
+			pdie("connect() failed");
 		}
-		/*
-		 * Try again; we might be racing with the child process.
-		 * (This could be fixed, but it's probably more trouble
-		 * than it's worth.)
-		 */
-		sleep(1);
 	}
 
-	die("can't connect to watcher in '%s'\n", statedir);
+	return fd;
 }
 
-static void create_ns(const char *statedir, const char *name)
+static int create_ns(const char *statedir, const char *name)
 {
 	char str[64];
 	uid_t uid = getuid();
@@ -530,14 +528,25 @@ static void create_ns(const char *statedir, const char *name)
 		if (inotify_wd < 0)
 			die("can't watch resolv.conf\n");
 	}
-	write_pid(statedir, create_watcher(statedir, resolv,
-					   inotify_fd, inotify_wd));
+
+	/*
+	 * Create the initial watcher connection here so that the parent
+	 * process doesn't need to wait for the child process to start up.
+	 */
+	int initial_conn_fd[2];
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, initial_conn_fd) < 0)
+		pdie("socketpair failed");
+	write_pid(statedir, create_watcher(statedir, initial_conn_fd[1],
+					   resolv, inotify_fd, inotify_wd));
+	close(initial_conn_fd[1]);
 	close(inotify_fd);
 
 	free(mount_opts);
 	free(resolv);
 	free(workdir);
 	free(local_etc);
+
+	return initial_conn_fd[0];
 }
 
 static int enter_or_create_ns(const char *statedir, const char *name)
@@ -546,12 +555,14 @@ static int enter_or_create_ns(const char *statedir, const char *name)
 
 	pid_t pid = read_pid(statedir);
 	if (pid <= 0 || kill(pid, 0)) {
-		create_ns(statedir, name);
-		fd = connect_to_watcher(statedir);
+		fd = create_ns(statedir, name);
 	} else {
 		/* Prevent destroy/join races by connecting first */
 		fd = connect_to_watcher(statedir);
-		enter_all(pid);
+		if (fd < 0)
+			fd = create_ns(statedir, name);
+		else
+			enter_all(pid);
 	}
 
 	return fd;
