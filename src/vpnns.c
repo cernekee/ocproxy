@@ -59,6 +59,12 @@
 #define DEFAULT_NAME		"default"
 #define DEFAULT_DNS_LIST	"8.8.8.8 8.8.4.4"
 
+#ifdef __GNUC__
+#define __printf_attr __attribute__((format (printf, 1, 2)))
+#else
+#define __printf_attr
+#endif
+
 struct packet_loop_ctx {
 	struct event_base *event_base;
 	struct event *tun_event;
@@ -73,12 +79,24 @@ struct watcher_ctx {
 	int refcount;
 };
 
-static void die(const char *fmt, ...)
+static void __printf_attr die(const char *fmt, ...)
 {
 	va_list ap;
 
 	va_start(ap, fmt);
 	vprintf(fmt, ap);
+	va_end(ap);
+
+	exit(1);
+}
+
+static void __printf_attr pdie(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	vprintf(fmt, ap);
+	printf(": %s\n", strerror(errno));
 	va_end(ap);
 
 	exit(1);
@@ -172,17 +190,16 @@ static void enter_all(pid_t pid)
 
 	pwd = get_current_dir_name();
 	if (!pwd)
-		die("can't get current directory: %s\n", strerror(errno));
+		pdie("can't get current directory");
 
 	if (enter_ns(pid, "user", CLONE_NEWUSER) ||
 	    enter_ns(pid, "uts", CLONE_NEWUTS) ||
 	    enter_ns(pid, "net", CLONE_NEWNET) ||
 	    enter_ns(pid, "mnt", CLONE_NEWNS))
-		die("can't set namespace with pid %d: %s\n",
-		    (int)pid, strerror(errno));
+		pdie("can't set namespace with pid %d", (int)pid);
 
 	if (chdir(pwd) < 0)
-		die("can't set current directory: %s\n", strerror(errno));
+		pdie("can't set current directory");
 
 	free(pwd);
 }
@@ -196,7 +213,7 @@ static void setup_ipv4(const char *ifname, const char *addr, const char *mask,
 
 	int fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
 	if (fd < 0)
-		die("socket() failed: %s\n", strerror(errno));
+		pdie("socket() failed");
 
 	memset(&ifr, 0, sizeof(ifr));
 	memset(&route, 0, sizeof(route));
@@ -207,23 +224,21 @@ static void setup_ipv4(const char *ifname, const char *addr, const char *mask,
 	if (inet_pton(AF_INET, addr, &sin->sin_addr) != 1)
 		die("invalid IPv4 address '%s'\n", addr);
 	if (ioctl(fd, SIOCSIFADDR, &ifr) < 0) {
-		die("can't set IPv4 address on %s: %s\n", ifname,
-		    strerror(errno));
+		pdie("can't set IPv4 address on %s", ifname);
 	}
 	memcpy(&route.rt_gateway, sin, sizeof(*sin));
 
 	if (inet_pton(AF_INET, mask, &sin->sin_addr) != 1)
 		die("invalid IPv4 netmask '%s'\n", mask);
 	if (ioctl(fd, SIOCSIFNETMASK, &ifr) < 0) {
-		die("can't set IPv4 netmask on %s: %s\n", ifname,
-		    strerror(errno));
+		pdie("can't set IPv4 netmask on %s", ifname);
 	}
 
 	if (ioctl(fd, SIOCGIFFLAGS, &ifr) < 0)
-		die("SIOCGIFFLAGS failed\n");
+		pdie("SIOCGIFFLAGS failed");
 	ifr.ifr_flags |= IFF_UP;
 	if (ioctl(fd, SIOCSIFFLAGS, &ifr) < 0)
-		die("SIOCGIFFLAGS failed\n");
+		pdie("SIOCGIFFLAGS failed");
 
 	if (default_route) {
 		sin = (struct sockaddr_in *)&route.rt_dst;
@@ -234,7 +249,7 @@ static void setup_ipv4(const char *ifname, const char *addr, const char *mask,
 		route.rt_flags = RTF_UP | RTF_GATEWAY;
 
 		if (ioctl(fd, SIOCADDRT, &route) < 0)
-			die("can't add default route: %s\n", strerror(errno));
+			pdie("can't add default route");
 	}
 
 	if (mtu) {
@@ -242,7 +257,7 @@ static void setup_ipv4(const char *ifname, const char *addr, const char *mask,
 		strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
 		ifr.ifr_mtu = mtu;
 		if (ioctl(fd, SIOCSIFMTU, &ifr) < 0)
-			die("can't set up MTU: %s\n", strerror(errno));
+			pdie("can't set up MTU");
 	}
 
 	close(fd);
@@ -261,14 +276,13 @@ static char *populate_statedir(const char *statedir, const char *file,
 		if (mkdir(path, 0755) < 0 &&
 		    stat(path, &st) == 0 &&
 		    !S_ISDIR(st.st_mode)) {
-			die("can't create directory '%s': %s\n", path,
-			    strerror(errno));
+			pdie("can't create directory '%s'", path);
 		}
 	} else {
 		unlink(path);
 		int fd = open(path, O_WRONLY | O_CREAT, 0644);
 		if (fd < 0)
-			die("can't create '%s': %s\n", path, strerror(errno));
+			pdie("can't create '%s'", path);
 		close(fd);
 	}
 	return path;
@@ -313,7 +327,7 @@ static pid_t create_watcher(const char *statedir)
 {
 	pid_t pid = fork();
 	if (pid < 0)
-		die("fork failed: %s\n", strerror(errno));
+		pdie("fork failed");
 	else if (pid > 0)
 		return pid;
 
@@ -370,7 +384,7 @@ static int connect_to_watcher(const char *statedir)
 
 	int fd = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (fd < 0)
-		die("socket() failed: %s\n", strerror(errno));
+		pdie("socket() failed");
 
 	int i;
 	for (i = 0; i < 5; i++) {
@@ -397,7 +411,7 @@ static void create_ns(const char *statedir, const char *name)
 
 	if (unshare(CLONE_NEWNS | CLONE_NEWNET |
 		    CLONE_NEWUTS | CLONE_NEWUSER) < 0)
-		die("can't unshare namespaces: %s\n", strerror(errno));
+		pdie("can't unshare namespaces");
 
 	if (access("/proc/self/setgroups", O_RDONLY) == 0)
 		write_file("/proc/self/setgroups", "deny");
@@ -408,7 +422,7 @@ static void create_ns(const char *statedir, const char *name)
 	write_pid(statedir, create_watcher(statedir));
 
 	if (sethostname(name, strlen(name)) < 0)
-		die("can't set hostname: %s\n", strerror(errno));
+		pdie("can't set hostname");
 	setup_ipv4("lo", "127.0.0.1", "255.0.0.0", false, 0);
 
 	char *local_etc = populate_statedir(statedir, "etc", true);
@@ -455,7 +469,7 @@ static int run(char *file, char **argv)
 	int rv = 0;
 
 	if (pid < 0)
-		die("can't fork: %s\n", strerror(errno));
+		pdie("can't fork");
 	else if (pid > 0)
 		waitpid(pid, &rv, 0);
 	else {
@@ -465,7 +479,7 @@ static int run(char *file, char **argv)
 			char *arg[2] = { file, NULL };
 			execvp(file, arg);
 		}
-		die("can't exec '%s': %s\n", file, strerror(errno));
+		pdie("can't exec '%s'", file);
 	}
 
 	if (!WIFEXITED(rv))
@@ -521,9 +535,9 @@ static void do_packet_loop(int vpn_fd, int tun_fd)
 	struct packet_loop_ctx ctx;
 
 	if (fcntl(vpn_fd, F_SETFL, O_RDWR | O_NONBLOCK) < 0)
-		die("can't set O_NONBLOCK on VPN fd: %s\n", strerror(errno));
+		pdie("can't set O_NONBLOCK on VPN fd");
 	if (fcntl(tun_fd, F_SETFL, O_RDWR | O_NONBLOCK) < 0)
-		die("can't set O_NONBLOCK on tun fd: %s\n", strerror(errno));
+		pdie("can't set O_NONBLOCK on tun fd");
 
 	ctx.vpn_fd = vpn_fd;
 	ctx.tun_fd = tun_fd;
@@ -611,13 +625,13 @@ static int do_attach(const char *statedir, const char *name, const char *script)
 
 	int tun_fd = open("/dev/net/tun", O_RDWR);
 	if (tun_fd < 0)
-		die("can't open /dev/net/tun: %s\n", strerror(errno));
+		pdie("can't open /dev/net/tun");
 
 	struct ifreq ifr;
 	memset(&ifr, 0, sizeof(ifr));
 	ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
 	if (ioctl(tun_fd, TUNSETIFF, (void *)&ifr) < 0)
-		die("can't bind tun device: %s\n", strerror(errno));
+		pdie("can't bind tun device");
 
 	if (script) {
 		setenv("reason", "connect", 1);
