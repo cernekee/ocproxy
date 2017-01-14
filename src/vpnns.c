@@ -568,7 +568,7 @@ static int enter_or_create_ns(const char *statedir, const char *name)
 	return fd;
 }
 
-static int run(char *file, char **argv)
+static int run(const char *file, char **argv)
 {
 	pid_t pid = fork();
 	int rv = 0;
@@ -581,7 +581,7 @@ static int run(char *file, char **argv)
 		if (argv)
 			execvp(file, argv);
 		else {
-			char *arg[2] = { file, NULL };
+			char *arg[2] = { (char *)file, NULL };
 			execvp(file, arg);
 		}
 		pdie("can't exec '%s'", file);
@@ -692,15 +692,17 @@ static void setup_ip_from_env(const char *ifname)
 	setup_ipv4(ifname, val, "255.255.255.255", true, mtu);
 
 	val = getenv("INTERNAL_IP4_DNS");
+	if (val)
+		val = strdup(val);
+	else
+		val = strdup(DEFAULT_DNS_LIST);
 	if (!val)
-		val = DEFAULT_DNS_LIST;
+		die("out of memory\n");
 
 	FILE *f = fopen(RESOLV_CONF, "w");
 
 	if (!f)
 		die("can't open /etc/resolv.conf for writing\n");
-
-	val = strdup(val);
 
 	char *p = val;
 	while (1) {
@@ -807,7 +809,8 @@ static struct option longopts[] = {
 int main(int argc, char **argv)
 {
 	int rv;
-	char *name = DEFAULT_NAME, *statedir;
+	const char *name = DEFAULT_NAME;
+	char *statedir;
 	char *script = NULL;
 	bool attach = false;
 
