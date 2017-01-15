@@ -1,3 +1,12 @@
+v1.70 - UNRELEASED
+
+ - Have the vpnns watcher process re-create the bind mount if the underlying
+   resolv.conf is deleted (e.g. by NetworkManager)
+
+ - Eliminate the possible 1-second delay when starting a new vpnns instance
+
+ - Minor manpage update
+
 v1.60 - 2017/01/08
 
  - Allow specifying the local SOCKS address via "-D <addr>:<port>".

@@ -1,5 +1,5 @@
 AC_PREREQ([2.61])
-AC_INIT([ocproxy], [1.60], [dme@dme.org], [ocproxy], [https://github.com/cernekee/ocproxy])
+AC_INIT([ocproxy], [1.70], [dme@dme.org], [ocproxy], [https://github.com/cernekee/ocproxy])
 AM_INIT_AUTOMAKE
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
