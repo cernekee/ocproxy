@@ -179,6 +179,10 @@ the host network configuration.
 The `--name` option allows additional (and separate) namespaces to be
 created.
 
+If your X server is a version that uses abstract sockets only (and UNIX
+sockets in /tmp are disabled), you can re-enable UNIX sockets by adding
+`-listen unix` to `/etc/X11/xinit/xserverrc`.
+
 The OpenVPN example requires out-of-tree patches.  Updated openvpn and
 ocproxy packages are available for Ubuntu 14.04 LTS and 16.04 LTS:
 
