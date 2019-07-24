@@ -1,2 +1,0 @@
-/usr/bin/ar qc liblwipcontribportunix.a  CMakeFiles/lwipcontribportunix.dir/__/port/sys_arch.c.o CMakeFiles/lwipcontribportunix.dir/__/port/perf.c.o CMakeFiles/lwipcontribportunix.dir/__/port/netif/tapif.c.o CMakeFiles/lwipcontribportunix.dir/__/port/netif/list.c.o CMakeFiles/lwipcontribportunix.dir/__/port/netif/sio.c.o CMakeFiles/lwipcontribportunix.dir/__/port/netif/fifo.c.o
-/usr/bin/ranlib liblwipcontribportunix.a
