@@ -223,7 +223,7 @@ static void setup_ipv4(const char *ifname, const char *addr, const char *mask,
 	memset(&ifr, 0, sizeof(ifr));
 	memset(&route, 0, sizeof(route));
 
-	strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
+	strncpy(ifr.ifr_name, ifname, IFNAMSIZ-1);
 	ifr.ifr_addr.sa_family = AF_INET;
 
 	if (inet_pton(AF_INET, addr, &sin->sin_addr) != 1)
@@ -259,7 +259,7 @@ static void setup_ipv4(const char *ifname, const char *addr, const char *mask,
 
 	if (mtu) {
 		memset(&ifr, 0, sizeof(ifr));
-		strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
+		strncpy(ifr.ifr_name, ifname, IFNAMSIZ-1);
 		ifr.ifr_mtu = mtu;
 		if (ioctl(fd, SIOCSIFMTU, &ifr) < 0)
 			pdie("can't set up MTU");

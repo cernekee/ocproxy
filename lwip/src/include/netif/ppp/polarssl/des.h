@@ -33,7 +33,7 @@
  *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "lwip/opt.h"
+#include "netif/ppp/ppp_opts.h"
 #if LWIP_INCLUDED_POLARSSL_DES
 
 #ifndef LWIP_INCLUDED_POLARSSL_DES_H
@@ -80,7 +80,7 @@ void des_setkey_dec( des_context *ctx, unsigned char key[8] );
  * \param output   64-bit output block
  */
 void des_crypt_ecb( des_context *ctx,
-                    unsigned char input[8],
+                    const unsigned char input[8],
                     unsigned char output[8] );
 
 #ifdef __cplusplus

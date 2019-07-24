@@ -39,8 +39,8 @@
  *  http://csrc.nist.gov/publications/fips/fips46-3/fips46-3.pdf
  */
 
-#include "lwip/opt.h"
-#if LWIP_INCLUDED_POLARSSL_DES
+#include "netif/ppp/ppp_opts.h"
+#if PPP_SUPPORT && LWIP_INCLUDED_POLARSSL_DES
 
 #include "netif/ppp/polarssl/des.h"
 
@@ -394,7 +394,7 @@ void des_setkey_dec( des_context *ctx, unsigned char key[8] )
  * DES-ECB block encryption/decryption
  */
 void des_crypt_ecb( des_context *ctx,
-                    unsigned char input[8],
+                    const unsigned char input[8],
                     unsigned char output[8] )
 {
     int i;
@@ -419,4 +419,4 @@ void des_crypt_ecb( des_context *ctx,
     PUT_ULONG_BE( X, output, 4 );
 }
 
-#endif /* LWIP_INCLUDED_POLARSSL_DES */
+#endif /* PPP_SUPPORT && LWIP_INCLUDED_POLARSSL_DES */

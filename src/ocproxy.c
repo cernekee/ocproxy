@@ -54,8 +54,8 @@
 #include "lwip/netif.h"
 #include "lwip/stats.h"
 #include "lwip/sys.h"
-#include "lwip/tcp_impl.h"
-#include "netif/tcpdump.h"
+#include "lwip/tcp.h"
+#include "lwip/priv/tcp_priv.h" // for tcp_tmr()
 
 enum {
 	STATE_NEW		= 0,
@@ -176,13 +176,12 @@ static int ocp_sock_max;
 unsigned char debug_flags = 0;
 
 static int allow_remote;
-static int tcpdump_enabled;
 static int keep_intvl;
 static int got_sighup;
 static int got_sigusr1;
 static char *dns_domain;
 
-static void start_connection(struct ocp_sock *s, ip_addr_t *ipaddr);
+static void start_connection(struct ocp_sock *s, const ip_addr_t *ipaddr);
 static void start_resolution(struct ocp_sock *s, const char *hostname);
 
 /**********************************************************************
@@ -514,7 +513,7 @@ static err_t connect_cb(void *arg, struct tcp_pcb *tpcb, err_t err)
 	return ERR_OK;
 }
 
-static void start_connection(struct ocp_sock *s, ip_addr_t *ipaddr)
+static void start_connection(struct ocp_sock *s, const ip_addr_t *ipaddr)
 {
 	struct tcp_pcb *tpcb;
 	err_t err;
@@ -541,7 +540,7 @@ static void start_connection(struct ocp_sock *s, ip_addr_t *ipaddr)
 		warn("%s: tcp_connect() returned %d\n", __func__, (int)err);
 }
 
-static void finish_resolution(const char *hostname, ip_addr_t *ipaddr, void *arg)
+static void finish_resolution(const char *hostname, const ip4_addr_t *ipaddr, void *arg)
 {
 	struct ocp_sock *s = arg;
 
@@ -593,7 +592,7 @@ static void enqueue_dns_req(struct ocp_sock *s, const char *hostname,
 	}
 }
 
-static void retry_resolution(const char *hostname, ip_addr_t *ipaddr, void *arg)
+static void retry_resolution(const char *hostname, const ip_addr_t *ipaddr, void *arg)
 {
 	struct ocp_sock *s = arg;
 
@@ -684,8 +683,6 @@ static void lwip_data_cb(evutil_socket_t fd, short what, void *ctx)
 			q = q->next;
 		}
 		LINK_STATS_INC(link.recv);
-		if (tcpdump_enabled)
-			tcpdump(p);
 		s->netif->input(p, s->netif);
 	} else
 		warn("%s: could not allocate pbuf\n", __func__);
@@ -693,15 +690,12 @@ static void lwip_data_cb(evutil_socket_t fd, short what, void *ctx)
 }
 
 /* Called when lwIP has data to send up to the VPN */
-static err_t lwip_data_out(struct netif *netif, struct pbuf *p, ip_addr_t *ipaddr)
+static err_t lwip_data_out(struct netif *netif, struct pbuf *p, const ip_addr_t *ipaddr)
 {
 	struct ocp_sock *s = netif->state;
 	int i = 0, total = 0;
 	ssize_t ret;
 	struct iovec iov[MAX_IOVEC];
-
-	if (tcpdump_enabled)
-		tcpdump(p);
 
 	for (; p; p = p->next) {
 		if (i >= MAX_IOVEC) {
@@ -903,7 +897,6 @@ static struct option longopts[] = {
 	{ "keepalive",		1,	NULL,	'k' },
 	{ "allow-remote",	0,	NULL,	'g' },
 	{ "verbose",		0,	NULL,	'v' },
-	{ "tcpdump",		0,	NULL,	'T' },
 	{ NULL }
 };
 
@@ -980,9 +973,6 @@ int main(int argc, char **argv)
 				      LWIP_DBG_STATE | LWIP_DBG_FRESH |
 				      LWIP_DBG_HALT;
 			break;
-		case 'T':
-			tcpdump_enabled = 1;
-			break;
 		default:
 			die("unknown option: %c\n", opt);
 		}
@@ -1026,9 +1016,6 @@ int main(int argc, char **argv)
 
 	/* bind after all options have been parsed (especially -g) */
 	bind_all_listeners();
-
-	if (tcpdump_enabled)
-		tcpdump_init();
 
 	new_periodic_event(cb_tcp_tmr, NULL, 250);
 	new_periodic_event(cb_dns_tmr, NULL, 1000);

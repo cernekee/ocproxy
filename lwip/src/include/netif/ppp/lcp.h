@@ -42,13 +42,17 @@
  * $Id: lcp.h,v 1.20 2004/11/14 22:53:42 carlsonj Exp $
  */
 
-#include "lwip/opt.h"
+#include "netif/ppp/ppp_opts.h"
 #if PPP_SUPPORT /* don't build if not configured for use in lwipopts.h */
 
 #ifndef LCP_H
 #define	LCP_H
 
 #include "ppp.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /*
  * Options.
@@ -90,9 +94,11 @@
 /* Value used as data for CI_CALLBACK option */
 #define CBCP_OPT	6	/* Use callback control protocol */
 
+#if 0 /* moved to ppp_opts.h */
 #define DEFMRU	1500		/* Try for this */
 #define MINMRU	128		/* No MRUs below this */
 #define MAXMRU	16384		/* Normally limit MRU to this */
+#endif /* moved to ppp_opts.h */
 
 /* An endpoint discriminator, used with multilink. */
 #define MAX_ENDP_LEN	20	/* maximum length of discriminator value */
@@ -108,40 +114,33 @@ struct epdisc {
 typedef struct lcp_options {
     unsigned int passive           :1; /* Don't die if we don't get a response */
     unsigned int silent            :1; /* Wait for the other end to start first */
+#if 0 /* UNUSED */
     unsigned int restart           :1; /* Restart vs. exit after close */
+#endif /* UNUSED */
     unsigned int neg_mru           :1; /* Negotiate the MRU? */
     unsigned int neg_asyncmap      :1; /* Negotiate the async map? */
 #if PAP_SUPPORT
     unsigned int neg_upap          :1; /* Ask for UPAP authentication? */
-#else
-    unsigned int                   :1; /* 1 bit of padding */
 #endif /* PAP_SUPPORT */
 #if CHAP_SUPPORT
     unsigned int neg_chap          :1; /* Ask for CHAP authentication? */
-#else
-    unsigned int                   :1; /* 1 bit of padding */
 #endif /* CHAP_SUPPORT */
 #if EAP_SUPPORT
     unsigned int neg_eap           :1; /* Ask for EAP authentication? */
-#else
-    unsigned int                   :1; /* 1 bit of padding */
 #endif /* EAP_SUPPORT */
     unsigned int neg_magicnumber   :1; /* Ask for magic number? */
     unsigned int neg_pcompression  :1; /* HDLC Protocol Field Compression? */
     unsigned int neg_accompression :1; /* HDLC Address/Control Field Compression? */
 #if LQR_SUPPORT
     unsigned int neg_lqr           :1; /* Negotiate use of Link Quality Reports */
-#else
-    unsigned int                   :1; /* 1 bit of padding */
 #endif /* LQR_SUPPORT */
     unsigned int neg_cbcp          :1; /* Negotiate use of CBCP */
 #ifdef HAVE_MULTILINK
     unsigned int neg_mrru          :1; /* negotiate multilink MRRU */
-#else
-    unsigned int                   :1; /* 1 bit of padding */
 #endif /* HAVE_MULTILINK */
     unsigned int neg_ssnhf         :1; /* negotiate short sequence numbers */
     unsigned int neg_endpoint      :1; /* negotiate endpoint discriminator */
+
     u16_t mru;			/* Value of MRU */
 #ifdef HAVE_MULTILINK
     u16_t mrru;			/* Value of MRRU, and multilink enable */
@@ -159,18 +158,22 @@ typedef struct lcp_options {
 } lcp_options;
 
 void lcp_open(ppp_pcb *pcb);
-void lcp_close(ppp_pcb *pcb, char *reason);
+void lcp_close(ppp_pcb *pcb, const char *reason);
 void lcp_lowerup(ppp_pcb *pcb);
 void lcp_lowerdown(ppp_pcb *pcb);
 void lcp_sprotrej(ppp_pcb *pcb, u_char *p, int len);    /* send protocol reject */
 
 extern const struct protent lcp_protent;
 
-#if 0 /* moved to opt.h */
+#if 0 /* moved to ppp_opts.h */
 /* Default number of times we receive our magic number from the peer
    before deciding the link is looped-back. */
 #define DEFLOOPBACKFAIL	10
-#endif /* moved to opt.h */
+#endif /* moved to ppp_opts.h */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* LCP_H */
 #endif /* PPP_SUPPORT */

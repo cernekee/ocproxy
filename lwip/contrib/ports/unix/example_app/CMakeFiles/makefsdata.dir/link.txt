@@ -1,0 +1,1 @@
+/usr/lib64/ccache/cc -g   CMakeFiles/makefsdata.dir/__/__/__/__/src/apps/http/makefsdata/makefsdata.c.o  -o makefsdata 

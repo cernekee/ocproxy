@@ -74,11 +74,15 @@
 *   Extracted from avos.
 *****************************************************************************/
 
-#include "lwip/opt.h"
+#include "netif/ppp/ppp_opts.h"
 #if PPP_SUPPORT /* don't build if not configured for use in lwipopts.h */
 
 #ifndef MAGIC_H
 #define MAGIC_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /***********************
 *** PUBLIC FUNCTIONS ***
@@ -100,7 +104,6 @@ void magic_randomize(void);
  */
 u32_t magic(void);	/* Returns the next magic number */
 
-#if PPP_MD5_RANDM
 /*
  * Fill buffer with random bytes
  *
@@ -111,8 +114,16 @@ u32_t magic(void);	/* Returns the next magic number */
  * least some degree.  Also, it's important to get a good seed before
  * the first use.
  */
-void random_bytes(unsigned char *buf, u32_t len);
-#endif /* PPP_MD5_RANDM */
+void magic_random_bytes(unsigned char *buf, u32_t buf_len);
+
+/*
+ * Return a new random number between 0 and (2^pow)-1 included.
+ */
+u32_t magic_pow(u8_t pow);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* MAGIC_H */
 

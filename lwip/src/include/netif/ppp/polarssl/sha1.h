@@ -33,7 +33,7 @@
  *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "lwip/opt.h"
+#include "netif/ppp/ppp_opts.h"
 #if LWIP_INCLUDED_POLARSSL_SHA1
 
 #ifndef LWIP_INCLUDED_POLARSSL_SHA1_H
@@ -68,7 +68,7 @@ void sha1_starts( sha1_context *ctx );
  * \param input    buffer holding the  data
  * \param ilen     length of the input data
  */
-void sha1_update( sha1_context *ctx, unsigned char *input, int ilen );
+void sha1_update( sha1_context *ctx, const unsigned char *input, int ilen );
 
 /**
  * \brief          SHA-1 final digest
