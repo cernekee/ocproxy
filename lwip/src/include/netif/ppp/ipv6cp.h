@@ -44,30 +44,30 @@
     Alain.Durand@imag.fr, IMAG,
     Jean-Luc.Richier@imag.fr, IMAG-LSR.
 
-    Ce travail a été fait au sein du GIE DYADE (Groupement d'Intérêt
-    Économique ayant pour membres BULL S.A. et l'INRIA).
+    Ce travail a Ã©tÃ© fait au sein du GIE DYADE (Groupement d'IntÃ©rÃªt
+    Ã‰conomique ayant pour membres BULL S.A. et l'INRIA).
 
     Ce logiciel informatique est disponible aux conditions
-    usuelles dans la recherche, c'est-à-dire qu'il peut
-    être utilisé, copié, modifié, distribué à l'unique
-    condition que ce texte soit conservé afin que
+    usuelles dans la recherche, c'est-Ã -dire qu'il peut
+    Ãªtre utilisÃ©, copiÃ©, modifiÃ©, distribuÃ© Ã  l'unique
+    condition que ce texte soit conservÃ© afin que
     l'origine de ce logiciel soit reconnue.
 
     Le nom de l'Institut National de Recherche en Informatique
     et en Automatique (INRIA), de l'IMAG, ou d'une personne morale
-    ou physique ayant participé à l'élaboration de ce logiciel ne peut
-    être utilisé sans son accord préalable explicite.
+    ou physique ayant participÃ© Ã  l'Ã©laboration de ce logiciel ne peut
+    Ãªtre utilisÃ© sans son accord prÃ©alable explicite.
 
     Ce logiciel est fourni tel quel sans aucune garantie,
-    support ou responsabilité d'aucune sorte.
-    Ce logiciel est dérivé de sources d'origine
+    support ou responsabilitÃ© d'aucune sorte.
+    Ce logiciel est dÃ©rivÃ© de sources d'origine
     "University of California at Berkeley" et
     "Digital Equipment Corporation" couvertes par des copyrights.
 
-    L'Institut d'Informatique et de Mathématiques Appliquées de Grenoble (IMAG)
-    est une fédération d'unités mixtes de recherche du CNRS, de l'Institut National
-    Polytechnique de Grenoble et de l'Université Joseph Fourier regroupant
-    sept laboratoires dont le laboratoire Logiciels, Systèmes, Réseaux (LSR).
+    L'Institut d'Informatique et de MathÃ©matiques AppliquÃ©es de Grenoble (IMAG)
+    est une fÃ©dÃ©ration d'unitÃ©s mixtes de recherche du CNRS, de l'Institut National
+    Polytechnique de Grenoble et de l'UniversitÃ© Joseph Fourier regroupant
+    sept laboratoires dont le laboratoire Logiciels, SystÃ¨mes, RÃ©seaux (LSR).
 
     This work has been done in the context of GIE DYADE (joint R & D venture
     between BULL S.A. and INRIA).
@@ -138,7 +138,7 @@
  * $Id: ipv6cp.h,v 1.7 2002/12/04 23:03:32 paulus Exp $
  */
 
-#include "lwip/opt.h"
+#include "netif/ppp/ppp_opts.h"
 #if PPP_SUPPORT && PPP_IPV6_SUPPORT  /* don't build if not configured for use in lwipopts.h */
 
 #ifndef IPV6CP_H
@@ -146,11 +146,17 @@
 
 #include "eui64.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * Options.
  */
 #define CI_IFACEID	1	/* Interface Identifier */
+#ifdef IPV6CP_COMP
 #define CI_COMPRESSTYPE	2	/* Compression Type     */
+#endif /* IPV6CP_COMP */
 
 /* No compression types yet defined.
  *#define IPV6CP_COMP	0x004f
@@ -163,17 +169,23 @@ typedef struct ipv6cp_options {
     unsigned int opt_remote     :1;  /* histoken set by option */
     unsigned int use_ip         :1;  /* use IP as interface identifier */
 #if 0
-#if defined(SOL2) || defined(__linux__)
     unsigned int use_persistent :1;  /* use uniquely persistent value for address */
-#endif /* defined(SOL2) */
 #endif
+#ifdef IPV6CP_COMP
     unsigned int neg_vj         :1;  /* Van Jacobson Compression? */
-    unsigned int                :1;  /* 1 bit of padding to round out to 8 bits */
+#endif /* IPV6CP_COMP */
+
+#ifdef IPV6CP_COMP
     u_short vj_protocol;        /* protocol value to use in VJ option */
+#endif /* IPV6CP_COMP */
     eui64_t ourid, hisid;       /* Interface identifiers */
 } ipv6cp_options;
 
 extern const struct protent ipv6cp_protent;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* IPV6CP_H */
 #endif /* PPP_SUPPORT && PPP_IPV6_SUPPORT */

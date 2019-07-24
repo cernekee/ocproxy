@@ -31,24 +31,74 @@
 *   Original derived from BSD codes.
 *****************************************************************************/
 
-#include "lwip/opt.h"
+#include "netif/ppp/ppp_opts.h"
 #if PPP_SUPPORT /* don't build if not configured for use in lwipopts.h */
 
 #ifndef PPP_H
 #define PPP_H
 
 #include "lwip/def.h"
-#include "lwip/sio.h"
 #include "lwip/stats.h"
 #include "lwip/mem.h"
 #include "lwip/netif.h"
 #include "lwip/sys.h"
-#include "lwip/timers.h"
+#include "lwip/timeouts.h"
 #if PPP_IPV6_SUPPORT
 #include "lwip/ip6_addr.h"
 #endif /* PPP_IPV6_SUPPORT */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
+/* Disable non-working or rarely used PPP feature, so rarely that we don't want to bloat ppp_opts.h with them */
+#ifndef PPP_OPTIONS
+#define PPP_OPTIONS         0
+#endif
+
+#ifndef PPP_NOTIFY
+#define PPP_NOTIFY          0
+#endif
+
+#ifndef PPP_REMOTENAME
+#define PPP_REMOTENAME      0
+#endif
+
+#ifndef PPP_IDLETIMELIMIT
+#define PPP_IDLETIMELIMIT   0
+#endif
+
+#ifndef PPP_LCP_ADAPTIVE
+#define PPP_LCP_ADAPTIVE    0
+#endif
+
+#ifndef PPP_MAXCONNECT
+#define PPP_MAXCONNECT      0
+#endif
+
+#ifndef PPP_ALLOWED_ADDRS
+#define PPP_ALLOWED_ADDRS   0
+#endif
+
+#ifndef PPP_PROTOCOLNAME
+#define PPP_PROTOCOLNAME    0
+#endif
+
+#ifndef PPP_STATS_SUPPORT
+#define PPP_STATS_SUPPORT   0
+#endif
+
+#ifndef DEFLATE_SUPPORT
+#define DEFLATE_SUPPORT     0
+#endif
+
+#ifndef BSDCOMPRESS_SUPPORT
+#define BSDCOMPRESS_SUPPORT 0
+#endif
+
+#ifndef PREDICTOR_SUPPORT
+#define PREDICTOR_SUPPORT   0
+#endif
 
 /*************************
 *** PUBLIC DEFINITIONS ***
@@ -64,18 +114,18 @@
  * Values for phase.
  */
 #define PPP_PHASE_DEAD          0
-#define PPP_PHASE_INITIALIZE    1
-#define PPP_PHASE_SERIALCONN    2
-#define PPP_PHASE_DORMANT       3
-#define PPP_PHASE_ESTABLISH     4
-#define PPP_PHASE_AUTHENTICATE  5
-#define PPP_PHASE_CALLBACK      6
-#define PPP_PHASE_NETWORK       7
-#define PPP_PHASE_RUNNING       8
-#define PPP_PHASE_TERMINATE     9
-#define PPP_PHASE_DISCONNECT    10
-#define PPP_PHASE_HOLDOFF       11
-#define PPP_PHASE_MASTER        12
+#define PPP_PHASE_MASTER        1
+#define PPP_PHASE_HOLDOFF       2
+#define PPP_PHASE_INITIALIZE    3
+#define PPP_PHASE_SERIALCONN    4
+#define PPP_PHASE_DORMANT       5
+#define PPP_PHASE_ESTABLISH     6
+#define PPP_PHASE_AUTHENTICATE  7
+#define PPP_PHASE_CALLBACK      8
+#define PPP_PHASE_NETWORK       9
+#define PPP_PHASE_RUNNING       10
+#define PPP_PHASE_TERMINATE     11
+#define PPP_PHASE_DISCONNECT    12
 
 /* Error codes. */
 #define PPPERR_NONE         0  /* No error. */
@@ -92,17 +142,8 @@
 #define PPPERR_CONNECTTIME  11 /* Max connect time reached */
 #define PPPERR_LOOPBACK     12 /* Loopback detected */
 
-/*
- * PPP IOCTL commands.
- */
-/*
- * Get the up status - 0 for down, non-zero for up.  The argument must
- * point to an int.
- */
-#define PPPCTLG_UPSTATUS 100 /* Get the up status - 0 down else up */
-#define PPPCTLS_ERRCODE  101 /* Set the error code */
-#define PPPCTLG_ERRCODE  102 /* Get the error code */
-#define PPPCTLG_FD       103 /* Get the fd associated with the ppp */
+/* Whether auth support is enabled at all */
+#define PPP_AUTH_SUPPORT (PAP_SUPPORT || CHAP_SUPPORT || EAP_SUPPORT)
 
 /************************
 *** PUBLIC DATA TYPES ***
@@ -126,7 +167,15 @@ typedef unsigned char  u_char;
 
 #include "fsm.h"
 #include "lcp.h"
+#if CCP_SUPPORT
+#include "ccp.h"
+#endif /* CCP_SUPPORT */
+#if MPPE_SUPPORT
+#include "mppe.h"
+#endif /* MPPE_SUPPORT */
+#if PPP_IPV4_SUPPORT
 #include "ipcp.h"
+#endif /* PPP_IPV4_SUPPORT */
 #if PPP_IPV6_SUPPORT
 #include "ipv6cp.h"
 #endif /* PPP_IPV6_SUPPORT */
@@ -143,66 +192,53 @@ typedef unsigned char  u_char;
 #include "vj.h"
 #endif /* VJ_SUPPORT */
 
-#if PPPOE_SUPPORT
-#include "netif/ppp/pppoe.h"
-#endif /* PPPOE_SUPPORT */
-#if PPPOL2TP_SUPPORT
-#include "netif/ppp/pppol2tp.h"
-#endif /* PPPOL2TP_SUPPORT */
+/* Link status callback function prototype */
+typedef void (*ppp_link_status_cb_fn)(ppp_pcb *pcb, int err_code, void *ctx);
 
 /*
  * PPP configuration.
  */
 typedef struct ppp_settings_s {
 
-#if PPP_SERVER
-  unsigned int  auth_required     : 1;       /* Peer is required to authenticate */
-  unsigned int  null_login        : 1;       /* Username of "" and a password of "" are acceptable */
-#else
-    unsigned int                   :2;       /* 2 bits of padding */
-#endif /* PPP_SERVER */
+#if PPP_SERVER && PPP_AUTH_SUPPORT
+  unsigned int  auth_required       :1;      /* Peer is required to authenticate */
+  unsigned int  null_login          :1;      /* Username of "" and a password of "" are acceptable */
+#endif /* PPP_SERVER && PPP_AUTH_SUPPORT */
 #if PPP_REMOTENAME
-  unsigned int  explicit_remote   : 1;       /* remote_name specified with remotename opt */
-#else
-    unsigned int                   :1;       /* 1 bit of padding */
+  unsigned int  explicit_remote     :1;      /* remote_name specified with remotename opt */
 #endif /* PPP_REMOTENAME */
 #if PAP_SUPPORT
-  unsigned int  refuse_pap        : 1;       /* Don't wanna auth. ourselves with PAP */
-#else
-    unsigned int                   :1;       /* 1 bit of padding */
+  unsigned int  refuse_pap          :1;      /* Don't proceed auth. with PAP */
 #endif /* PAP_SUPPORT */
 #if CHAP_SUPPORT
-  unsigned int  refuse_chap       : 1;       /* Don't wanna auth. ourselves with CHAP */
-#else
-    unsigned int                   :1;       /* 1 bit of padding */
+  unsigned int  refuse_chap         :1;      /* Don't proceed auth. with CHAP */
 #endif /* CHAP_SUPPORT */
 #if MSCHAP_SUPPORT
-  unsigned int  refuse_mschap     : 1;       /* Don't wanna auth. ourselves with MS-CHAP */
-  unsigned int  refuse_mschap_v2  : 1;       /* Don't wanna auth. ourselves with MS-CHAPv2 */
-#else
-    unsigned int                   :2;       /* 2 bits of padding */
+  unsigned int  refuse_mschap       :1;      /* Don't proceed auth. with MS-CHAP */
+  unsigned int  refuse_mschap_v2    :1;      /* Don't proceed auth. with MS-CHAPv2 */
 #endif /* MSCHAP_SUPPORT */
 #if EAP_SUPPORT
-  unsigned int  refuse_eap        : 1;       /* Don't wanna auth. ourselves with EAP */
-#else
-    unsigned int                   :1;       /* 1 bit of padding */
+  unsigned int  refuse_eap          :1;      /* Don't proceed auth. with EAP */
 #endif /* EAP_SUPPORT */
-  unsigned int  usepeerdns        : 1;       /* Ask peer for DNS adds */
-  unsigned int  persist           : 1;       /* Persist mode, always try to reopen the connection */
+#if LWIP_DNS
+  unsigned int  usepeerdns          :1;      /* Ask peer for DNS adds */
+#endif /* LWIP_DNS */
+  unsigned int  persist             :1;      /* Persist mode, always try to open the connection */
 #if PRINTPKT_SUPPORT
-  unsigned int  hide_password     : 1;       /* Hide password in dumped packets */
-#else
-    unsigned int                   :1;       /* 1 bit of padding */
+  unsigned int  hide_password       :1;      /* Hide password in dumped packets */
 #endif /* PRINTPKT_SUPPORT */
-  unsigned int  noremoteip        : 1;       /* Let him have no IP address */
-  unsigned int  lax_recv          : 1;       /* accept control chars in asyncmap */
-  unsigned int  noendpoint        : 1;       /* don't send/accept endpoint discriminator */
+  unsigned int  noremoteip          :1;      /* Let him have no IP address */
+  unsigned int  lax_recv            :1;      /* accept control chars in asyncmap */
+  unsigned int  noendpoint          :1;      /* don't send/accept endpoint discriminator */
 #if PPP_LCP_ADAPTIVE
-  unsigned int lcp_echo_adaptive  : 1;       /* request echo only if the link was idle */
-#else
-    unsigned int                   :1;       /* 1 bit of padding */
-#endif
-    unsigned int                   :1;       /* 1 bit of padding to round out to 16 bits */
+  unsigned int lcp_echo_adaptive    :1;      /* request echo only if the link was idle */
+#endif /* PPP_LCP_ADAPTIVE */
+#if MPPE_SUPPORT
+  unsigned int require_mppe         :1;      /* Require MPPE (Microsoft Point to Point Encryption) */
+  unsigned int refuse_mppe_40       :1;      /* Allow MPPE 40-bit mode? */
+  unsigned int refuse_mppe_128      :1;      /* Allow MPPE 128-bit mode? */
+  unsigned int refuse_mppe_stateful :1;      /* Allow MPPE stateful mode? */
+#endif /* MPPE_SUPPORT */
 
   u16_t  listen_time;                 /* time to listen first (ms), waiting for peer to send LCP packet */
 
@@ -213,12 +249,10 @@ typedef struct ppp_settings_s {
   u32_t  maxconnect;                  /* Maximum connect time (seconds) */
 #endif /* PPP_MAXCONNECT */
 
+#if PPP_AUTH_SUPPORT
   /* auth data */
-  char  *user;                         /* Username for PAP */
-  char  *passwd;                       /* Password for PAP, secret for CHAP */
-#if PPP_SERVER
-  char  our_name   [MAXNAMELEN   + 1]; /* Our name for authentication purposes */
-#endif /* PPP_SERVER */
+  const char  *user;                   /* Username for PAP */
+  const char  *passwd;                 /* Password for PAP, secret for CHAP */
 #if PPP_REMOTENAME
   char  remote_name[MAXNAMELEN   + 1]; /* Peer's name for authentication */
 #endif /* PPP_REMOTENAME */
@@ -248,6 +282,8 @@ typedef struct ppp_settings_s {
 #endif /* PPP_SERVER */
 #endif /* EAP_SUPPORT */
 
+#endif /* PPP_AUTH_SUPPORT */
+
   u8_t  fsm_timeout_time;            /* Timeout time in seconds */
   u8_t  fsm_max_conf_req_transmits;  /* Maximum Configure-Request transmissions */
   u8_t  fsm_max_term_transmits;      /* Maximum Terminate-Request transmissions */
@@ -260,130 +296,68 @@ typedef struct ppp_settings_s {
 
 } ppp_settings;
 
+#if PPP_SERVER
 struct ppp_addrs {
-  ip_addr_t our_ipaddr, his_ipaddr, netmask;
-  ip_addr_t dns1, dns2;
+#if PPP_IPV4_SUPPORT
+  ip4_addr_t our_ipaddr, his_ipaddr, netmask;
+#if LWIP_DNS
+  ip4_addr_t dns1, dns2;
+#endif /* LWIP_DNS */
+#endif /* PPP_IPV4_SUPPORT */
 #if PPP_IPV6_SUPPORT
   ip6_addr_t our6_ipaddr, his6_ipaddr;
 #endif /* PPP_IPV6_SUPPORT */
 };
-
-/* FIXME: find a way to move ppp_dev_states and ppp_pcb_rx_s to ppp_impl.h */
-#if PPPOS_SUPPORT
-/*
- * Extended asyncmap - allows any character to be escaped.
- */
-typedef u_char  ext_accm[32];
-
-/* PPP packet parser states.  Current state indicates operation yet to be
- * completed. */
-typedef enum {
-  PDIDLE = 0,  /* Idle state - waiting. */
-  PDSTART,     /* Process start flag. */
-  PDADDRESS,   /* Process address field. */
-  PDCONTROL,   /* Process control field. */
-  PDPROTOCOL1, /* Process protocol field 1. */
-  PDPROTOCOL2, /* Process protocol field 2. */
-  PDDATA       /* Process data byte. */
-} ppp_dev_states;
-
-/*
- * PPP interface RX control block.
- */
-typedef struct ppp_pcb_rx_s {
-  /** ppp descriptor */
-  ppp_pcb *pcb;
-  /** the rx file descriptor */
-  sio_fd_t fd;
-
-  /* The input packet. */
-  struct pbuf *in_head, *in_tail;
-
-  u16_t in_protocol;             /* The input protocol code. */
-  u16_t in_fcs;                  /* Input Frame Check Sequence value. */
-  ppp_dev_states in_state;       /* The input process state. */
-  char in_escaped;               /* Escape next character. */
-  ext_accm in_accm;              /* Async-Ctl-Char-Map for input. */
-} ppp_pcb_rx;
-#endif /* PPPOS_SUPPORT */
+#endif /* PPP_SERVER */
 
 /*
  * PPP interface control block.
  */
 struct ppp_pcb_s {
-  /* -- below are data that will NOT be cleared between two sessions */
-#if PPP_DEBUG
-  u8_t num;                      /* Interface number - only useful for debugging */
-#endif /* PPP_DEBUG */
   ppp_settings settings;
-#if PPPOS_SUPPORT
-  sio_fd_t fd;                   /* File device ID of port. */
-#endif /* PPPOS_SUPPORT */
-#if PPPOE_SUPPORT
-  struct pppoe_softc *pppoe_sc;
-#endif /* PPPOE_SUPPORT */
-#if PPPOL2TP_SUPPORT
-  pppol2tp_pcb *l2tp_pcb;
-#endif /* PPPOL2TP_SUPPORT */
+  const struct link_callbacks *link_cb;
+  void *link_ctx_cb;
   void (*link_status_cb)(ppp_pcb *pcb, int err_code, void *ctx);  /* Status change callback */
 #if PPP_NOTIFY_PHASE
   void (*notify_phase_cb)(ppp_pcb *pcb, u8_t phase, void *ctx);   /* Notify phase callback */
 #endif /* PPP_NOTIFY_PHASE */
   void *ctx_cb;                  /* Callbacks optional pointer */
-  struct netif netif;            /* PPP interface */
-
-  /* -- below are data that will be cleared between two sessions */
-
-  /*
-   * phase must be the first member of cleared members, because it is used to know
-   * which part must not be cleared.
-   */
+  struct netif *netif;           /* PPP interface */
   u8_t phase;                    /* where the link is at */
   u8_t err_code;                 /* Code indicating why interface is down. */
 
   /* flags */
-  unsigned int if_up                   :1; /* True when the interface is up. */
-  unsigned int pcomp                   :1; /* Does peer accept protocol compression? */
-  unsigned int accomp                  :1; /* Does peer accept addr/ctl compression? */
-  unsigned int proxy_arp_set           :1; /* Have created proxy arp entry */
+#if PPP_IPV4_SUPPORT
+  unsigned int ask_for_local           :1; /* request our address from peer */
   unsigned int ipcp_is_open            :1; /* haven't called np_finished() */
   unsigned int ipcp_is_up              :1; /* have called ipcp_up() */
+  unsigned int if4_up                  :1; /* True when the IPv4 interface is up. */
+#if 0 /* UNUSED - PROXY ARP */
+  unsigned int proxy_arp_set           :1; /* Have created proxy arp entry */
+#endif /* UNUSED - PROXY ARP */
+#endif /* PPP_IPV4_SUPPORT */
 #if PPP_IPV6_SUPPORT
   unsigned int ipv6cp_is_up            :1; /* have called ip6cp_up() */
-#else
-  unsigned int                         :1; /* 1 bit of padding */
+  unsigned int if6_up                  :1; /* True when the IPv6 interface is up. */
 #endif /* PPP_IPV6_SUPPORT */
-  unsigned int ask_for_local           :1; /* request our address from peer */
   unsigned int lcp_echo_timer_running  :1; /* set if a timer is running */
-#if PPPOS_SUPPORT && VJ_SUPPORT
-  unsigned int vj_enabled              :1; /* Flag indicating VJ compression enabled. */
-#else
-  unsigned int                         :1; /* 1 bit of padding */
-#endif /* PPPOS_SUPPORT && VJ_SUPPORT */
-  unsigned int                         :6; /* 5 bits of padding to round out to 16 bits */
-
-#if PPPOS_SUPPORT
-/* FIXME: there is probably one superfluous */
-  ext_accm out_accm;             /* Async-Ctl-Char-Map for output. */
-  ext_accm xmit_accm;            /* extended transmit ACCM */
-  ppp_pcb_rx rx;
 #if VJ_SUPPORT
-  struct vjcompress vj_comp;     /* Van Jacobson compression header. */
+  unsigned int vj_enabled              :1; /* Flag indicating VJ compression enabled. */
 #endif /* VJ_SUPPORT */
-#endif /* PPPOS_SUPPORT */
+#if CCP_SUPPORT
+  unsigned int ccp_all_rejected        :1; /* we rejected all peer's options */
+#endif /* CCP_SUPPORT */
+#if MPPE_SUPPORT
+  unsigned int mppe_keys_set           :1; /* Have the MPPE keys been set? */
+#endif /* MPPE_SUPPORT */
 
-  u32_t last_xmit;               /* Time of last transmission. */
-
-  struct ppp_addrs addrs;        /* PPP addresses */
-
+#if PPP_AUTH_SUPPORT
   /* auth data */
-#if PPP_SERVER
+#if PPP_SERVER && defined(HAVE_MULTILINK)
   char peer_authname[MAXNAMELEN + 1]; /* The name by which the peer authenticated itself to us. */
-#endif /* PPP_SERVER */
+#endif /* PPP_SERVER && defined(HAVE_MULTILINK) */
   u16_t auth_pending;        /* Records which authentication operations haven't completed yet. */
   u16_t auth_done;           /* Records which authentication operations have been completed. */
-  u8_t num_np_open;          /* Number of network protocols which we have opened. */
-  u8_t num_np_up;            /* Number of network protocols which have come up. */
 
 #if PAP_SUPPORT
   upap_state upap;           /* PAP data */
@@ -399,21 +373,46 @@ struct ppp_pcb_s {
 #if EAP_SUPPORT
   eap_state eap;            /* EAP data */
 #endif /* EAP_SUPPORT */
+#endif /* PPP_AUTH_SUPPORT */
 
   fsm lcp_fsm;                   /* LCP fsm structure */
   lcp_options lcp_wantoptions;   /* Options that we want to request */
   lcp_options lcp_gotoptions;    /* Options that peer ack'd */
   lcp_options lcp_allowoptions;  /* Options we allow peer to request */
   lcp_options lcp_hisoptions;    /* Options that we ack'd */
+  u16_t peer_mru;                /* currently negotiated peer MRU */
   u8_t lcp_echos_pending;        /* Number of outstanding echo msgs */
   u8_t lcp_echo_number;          /* ID number of next echo frame */
-  u16_t peer_mru;                /* currently negotiated peer MRU */
 
+  u8_t num_np_open;              /* Number of network protocols which we have opened. */
+  u8_t num_np_up;                /* Number of network protocols which have come up. */
+
+#if VJ_SUPPORT
+  struct vjcompress vj_comp;     /* Van Jacobson compression header. */
+#endif /* VJ_SUPPORT */
+
+#if CCP_SUPPORT
+  fsm ccp_fsm;                   /* CCP fsm structure */
+  ccp_options ccp_wantoptions;   /* what to request the peer to use */
+  ccp_options ccp_gotoptions;    /* what the peer agreed to do */
+  ccp_options ccp_allowoptions;  /* what we'll agree to do */
+  ccp_options ccp_hisoptions;    /* what we agreed to do */
+  u8_t ccp_localstate;           /* Local state (mainly for handling reset-reqs and reset-acks). */
+  u8_t ccp_receive_method;       /* Method chosen on receive path */
+  u8_t ccp_transmit_method;      /* Method chosen on transmit path */
+#if MPPE_SUPPORT
+  ppp_mppe_state mppe_comp;      /* MPPE "compressor" structure */
+  ppp_mppe_state mppe_decomp;    /* MPPE "decompressor" structure */
+#endif /* MPPE_SUPPORT */
+#endif /* CCP_SUPPORT */
+
+#if PPP_IPV4_SUPPORT
   fsm ipcp_fsm;                   /* IPCP fsm structure */
   ipcp_options ipcp_wantoptions;  /* Options that we want to request */
   ipcp_options ipcp_gotoptions;   /* Options that peer ack'd */
   ipcp_options ipcp_allowoptions; /* Options we allow peer to request */
   ipcp_options ipcp_hisoptions;   /* Options that we ack'd */
+#endif /* PPP_IPV4_SUPPORT */
 
 #if PPP_IPV6_SUPPORT
   fsm ipv6cp_fsm;                     /* IPV6CP fsm structure */
@@ -429,29 +428,13 @@ struct ppp_pcb_s {
  ************************/
 
 /*
- * Initialize the PPP subsystem.
+ * WARNING: For multi-threads environment, all ppp_set_* functions most
+ * only be called while the PPP is in the dead phase (i.e. disconnected).
  */
-int ppp_init(void);
 
+#if PPP_AUTH_SUPPORT
 /*
- * Create a new PPP session.
- *
- * This initializes the PPP control block but does not
- * attempt to negotiate the LCP session.
- *
- * Return a new PPP connection control block pointer
- * on success or a null pointer on failure.
- */
-ppp_pcb *ppp_new(void);
-
-/*
- * Set a PPP interface as the default network interface
- * (used to output all packets for which no specific route is found).
- */
-void ppp_set_default(ppp_pcb *pcb);
-
-/*
- * Set auth helper, optional, you can either fill ppp_pcb->settings.
+ * Set PPP authentication.
  *
  * Warning: Using PPPAUTHTYPE_ANY might have security consequences.
  * RFC 1994 says:
@@ -471,15 +454,143 @@ void ppp_set_default(ppp_pcb *pcb);
  * circumstances, then distinct user names SHOULD be employed, each of
  * which identifies exactly one authentication method.
  *
+ * Default is none auth type, unset (NULL) user and passwd.
  */
-#define PPPAUTHTYPE_NONE   0x00
-#define PPPAUTHTYPE_PAP    0x01
-#define PPPAUTHTYPE_CHAP   0x02
-#define PPPAUTHTYPE_MSCHAP 0x04
-#define PPPAUTHTYPE_EAP    0x08
-#define PPPAUTHTYPE_ANY    0xff
+#define PPPAUTHTYPE_NONE      0x00
+#define PPPAUTHTYPE_PAP       0x01
+#define PPPAUTHTYPE_CHAP      0x02
+#define PPPAUTHTYPE_MSCHAP    0x04
+#define PPPAUTHTYPE_MSCHAP_V2 0x08
+#define PPPAUTHTYPE_EAP       0x10
+#define PPPAUTHTYPE_ANY       0xff
+void ppp_set_auth(ppp_pcb *pcb, u8_t authtype, const char *user, const char *passwd);
 
-void ppp_set_auth(ppp_pcb *pcb, u8_t authtype, char *user, char *passwd);
+/*
+ * If set, peer is required to authenticate. This is mostly necessary for PPP server support.
+ *
+ * Default is false.
+ */
+#define ppp_set_auth_required(ppp, boolval) (ppp->settings.auth_required = boolval)
+#endif /* PPP_AUTH_SUPPORT */
+
+#if PPP_IPV4_SUPPORT
+/*
+ * Set PPP interface "our" and "his" IPv4 addresses. This is mostly necessary for PPP server
+ * support but it can also be used on a PPP link where each side choose its own IP address.
+ *
+ * Default is unset (0.0.0.0).
+ */
+#define ppp_set_ipcp_ouraddr(ppp, addr) do { ppp->ipcp_wantoptions.ouraddr = ip4_addr_get_u32(addr); \
+                                             ppp->ask_for_local = ppp->ipcp_wantoptions.ouraddr != 0; } while(0)
+#define ppp_set_ipcp_hisaddr(ppp, addr) (ppp->ipcp_wantoptions.hisaddr = ip4_addr_get_u32(addr))
+#if LWIP_DNS
+/*
+ * Set DNS server addresses that are sent if the peer asks for them. This is mostly necessary
+ * for PPP server support.
+ *
+ * Default is unset (0.0.0.0).
+ */
+#define ppp_set_ipcp_dnsaddr(ppp, index, addr) (ppp->ipcp_allowoptions.dnsaddr[index] = ip4_addr_get_u32(addr))
+
+/*
+ * If set, we ask the peer for up to 2 DNS server addresses. Received DNS server addresses are
+ * registered using the dns_setserver() function.
+ *
+ * Default is false.
+ */
+#define ppp_set_usepeerdns(ppp, boolval) (ppp->settings.usepeerdns = boolval)
+#endif /* LWIP_DNS */
+#endif /* PPP_IPV4_SUPPORT */
+
+#if MPPE_SUPPORT
+/* Disable MPPE (Microsoft Point to Point Encryption). This parameter is exclusive. */
+#define PPP_MPPE_DISABLE           0x00
+/* Require the use of MPPE (Microsoft Point to Point Encryption). */
+#define PPP_MPPE_ENABLE            0x01
+/* Allow MPPE to use stateful mode. Stateless mode is still attempted first. */
+#define PPP_MPPE_ALLOW_STATEFUL    0x02
+/* Refuse the use of MPPE with 40-bit encryption. Conflict with PPP_MPPE_REFUSE_128. */
+#define PPP_MPPE_REFUSE_40         0x04
+/* Refuse the use of MPPE with 128-bit encryption. Conflict with PPP_MPPE_REFUSE_40. */
+#define PPP_MPPE_REFUSE_128        0x08
+/*
+ * Set MPPE configuration
+ *
+ * Default is disabled.
+ */
+void ppp_set_mppe(ppp_pcb *pcb, u8_t flags);
+#endif /* MPPE_SUPPORT */
+
+/*
+ * Wait for up to intval milliseconds for a valid PPP packet from the peer.
+ * At the end of this  time, or when a valid PPP packet is received from the
+ * peer, we commence negotiation by sending our first LCP packet.
+ *
+ * Default is 0.
+ */
+#define ppp_set_listen_time(ppp, intval) (ppp->settings.listen_time = intval)
+
+/*
+ * If set, we will attempt to initiate a connection but if no reply is received from
+ * the peer, we will then just wait passively for a valid LCP packet from the peer.
+ *
+ * Default is false.
+ */
+#define ppp_set_passive(ppp, boolval) (ppp->lcp_wantoptions.passive = boolval)
+
+/*
+ * If set, we will not transmit LCP packets to initiate a connection until a valid
+ * LCP packet is received from the peer. This is what we usually call the server mode.
+ *
+ * Default is false.
+ */
+#define ppp_set_silent(ppp, boolval) (ppp->lcp_wantoptions.silent = boolval)
+
+/*
+ * If set, enable protocol field compression negotiation in both the receive and
+ * the transmit direction.
+ *
+ * Default is true.
+ */
+#define ppp_set_neg_pcomp(ppp, boolval) (ppp->lcp_wantoptions.neg_pcompression = \
+                                         ppp->lcp_allowoptions.neg_pcompression = boolval)
+
+/*
+ * If set, enable Address/Control compression in both the receive and the transmit
+ * direction.
+ *
+ * Default is true.
+ */
+#define ppp_set_neg_accomp(ppp, boolval) (ppp->lcp_wantoptions.neg_accompression = \
+                                          ppp->lcp_allowoptions.neg_accompression = boolval)
+
+/*
+ * If set, enable asyncmap negotiation. Otherwise forcing all control characters to
+ * be escaped for both the transmit and the receive direction.
+ *
+ * Default is true.
+ */
+#define ppp_set_neg_asyncmap(ppp, boolval) (ppp->lcp_wantoptions.neg_asyncmap = \
+                                            ppp->lcp_allowoptions.neg_asyncmap = boolval)
+
+/*
+ * This option sets the Async-Control-Character-Map (ACCM) for this end of the link.
+ * The ACCM is a set of 32 bits, one for each of the ASCII control characters with
+ * values from 0 to 31, where a 1 bit  indicates that the corresponding control
+ * character should not be used in PPP packets sent to this system. The map is
+ * an unsigned 32 bits integer where the least significant bit (00000001) represents
+ * character 0 and the most significant bit (80000000) represents character 31.
+ * We will then ask the peer to send these characters as a 2-byte escape sequence.
+ *
+ * Default is 0.
+ */
+#define ppp_set_asyncmap(ppp, intval) (ppp->lcp_wantoptions.asyncmap = intval)
+
+/*
+ * Set a PPP interface as the default network interface
+ * (used to output all packets for which no specific route is found).
+ */
+#define ppp_set_default(ppp)         netif_set_default(ppp->netif)
 
 #if PPP_NOTIFY_PHASE
 /*
@@ -492,76 +603,43 @@ typedef void (*ppp_notify_phase_cb_fn)(ppp_pcb *pcb, u8_t phase, void *ctx);
 void ppp_set_notify_phase_callback(ppp_pcb *pcb, ppp_notify_phase_cb_fn notify_phase_cb);
 #endif /* PPP_NOTIFY_PHASE */
 
-/* Link status callback function prototype */
-typedef void (*ppp_link_status_cb_fn)(ppp_pcb *pcb, int err_code, void *ctx);
-
-#if PPPOS_SUPPORT
 /*
- * Create a new PPP connection using the given serial I/O device.
- *
- * If this port connects to a modem, the modem connection must be
- * established before calling this.
- *
- * Return 0 on success, an error code on failure.
- */
-int ppp_over_serial_create(ppp_pcb *pcb, sio_fd_t fd, ppp_link_status_cb_fn link_status_cb, void *ctx_cb);
-#endif /* PPPOS_SUPPORT */
-
-#if PPPOE_SUPPORT
-/*
- * Create a new PPP Over Ethernet (PPPoE) connection.
- *
- * Return 0 on success, an error code on failure.
- */
-int ppp_over_ethernet_create(ppp_pcb *pcb, struct netif *ethif, const char *service_name, const char *concentrator_name,
-                        ppp_link_status_cb_fn link_status_cb, void *ctx_cb);
-#endif /* PPPOE_SUPPORT */
-
-#if PPPOL2TP_SUPPORT
-/*
- * Create a new PPP Over L2TP (PPPoL2TP) connection.
- */
-int ppp_over_l2tp_create(ppp_pcb *pcb, struct netif *netif, ip_addr_t *ipaddr, u16_t port,
-		u8_t *secret, u8_t secret_len,
-		ppp_link_status_cb_fn link_status_cb, void *ctx_cb);
-#endif /* PPPOL2TP_SUPPORT */
-
-/*
- * Open a PPP connection.
+ * Initiate a PPP connection.
  *
  * This can only be called if PPP is in the dead phase.
  *
  * Holdoff is the time to wait (in seconds) before initiating
  * the connection.
+ *
+ * If this port connects to a modem, the modem connection must be
+ * established before calling this.
  */
-int ppp_open(ppp_pcb *pcb, u16_t holdoff);
+err_t ppp_connect(ppp_pcb *pcb, u16_t holdoff);
+
+#if PPP_SERVER
+/*
+ * Listen for an incoming PPP connection.
+ *
+ * This can only be called if PPP is in the dead phase.
+ *
+ * If this port connects to a modem, the modem connection must be
+ * established before calling this.
+ */
+err_t ppp_listen(ppp_pcb *pcb);
+#endif /* PPP_SERVER */
 
 /*
  * Initiate the end of a PPP connection.
  * Any outstanding packets in the queues are dropped.
- * Return 0 on success, an error code on failure.
- */
-int ppp_close(ppp_pcb *pcb);
-
-/*
- * Indicate to the PPP stack that the line has disconnected.
- */
-void ppp_sighup(ppp_pcb *pcb);
-
-/*
- * Free the control block, clean everything except the PPP PCB itself
- * and the netif, it allows you to change the underlying PPP protocol
- * (eg. from PPPoE to PPPoS to switch from DSL to GPRS) without losing
- * your PPP and netif handlers.
  *
- * This can only be called if PPP is in the dead phase.
- *
- * You must use ppp_close() before if you wish to terminate
- * an established PPP session.
+ * Setting nocarrier to 1 close the PPP connection without initiating the
+ * shutdown procedure. Always using nocarrier = 0 is still recommended,
+ * this is going to take a little longer time if your link is down, but
+ * is a safer choice for the PPP state machine.
  *
  * Return 0 on success, an error code on failure.
  */
-int ppp_free(ppp_pcb *pcb);
+err_t ppp_close(ppp_pcb *pcb, u8_t nocarrier);
 
 /*
  * Release the control block.
@@ -573,35 +651,47 @@ int ppp_free(ppp_pcb *pcb);
  *
  * Return 0 on success, an error code on failure.
  */
-int ppp_delete(ppp_pcb *pcb);
+err_t ppp_free(ppp_pcb *pcb);
+
+/*
+ * PPP IOCTL commands.
+ *
+ * Get the up status - 0 for down, non-zero for up.  The argument must
+ * point to an int.
+ */
+#define PPPCTLG_UPSTATUS 0
+
+/*
+ * Get the PPP error code.  The argument must point to an int.
+ * Returns a PPPERR_* value.
+ */
+#define PPPCTLG_ERRCODE  1
+
+/*
+ * Get the fd associated with a PPP over serial
+ */
+#define PPPCTLG_FD       2
 
 /*
  * Get and set parameters for the given connection.
- * Return 0 on success, an error code on failure. 
+ * Return 0 on success, an error code on failure.
  */
-int ppp_ioctl(ppp_pcb *pcb, int cmd, void *arg);
-
-#if PPPOS_SUPPORT
-/*
- * PPP over Serial: this is the input function to be called for received data.
- */
-void pppos_input(ppp_pcb *pcb, u_char* data, int len);
-#endif /* PPPOS_SUPPORT */
+err_t ppp_ioctl(ppp_pcb *pcb, u8_t cmd, void *arg);
 
 /* Get the PPP netif interface */
-#define ppp_netif(ppp)               (&(ppp)->netif)
+#define ppp_netif(ppp)               (ppp->netif)
 
-/* Get the PPP addresses */
-#define ppp_addrs(ppp)               (&(ppp)->addrs)
-
-#if LWIP_NETIF_STATUS_CALLBACK
 /* Set an lwIP-style status-callback for the selected PPP device */
-void ppp_set_netif_statuscallback(ppp_pcb *pcb, netif_status_callback_fn status_callback);
-#endif /* LWIP_NETIF_STATUS_CALLBACK */
-#if LWIP_NETIF_LINK_CALLBACK
+#define ppp_set_netif_statuscallback(ppp, status_cb)       \
+        netif_set_status_callback(ppp->netif, status_cb);
+
 /* Set an lwIP-style link-callback for the selected PPP device */
-void ppp_set_netif_linkcallback(ppp_pcb *pcb, netif_status_callback_fn link_callback);
-#endif /* LWIP_NETIF_LINK_CALLBACK */
+#define ppp_set_netif_linkcallback(ppp, link_cb)           \
+        netif_set_link_callback(ppp->netif, link_cb);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* PPP_H */
 

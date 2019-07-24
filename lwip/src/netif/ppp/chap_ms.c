@@ -74,7 +74,7 @@
  *
  */
 
-#include "lwip/opt.h"
+#include "netif/ppp/ppp_opts.h"
 #if PPP_SUPPORT && MSCHAP_SUPPORT  /* don't build if not configured for use in lwipopts.h */
 
 #if 0 /* UNUSED */
@@ -93,55 +93,97 @@
 #include "netif/ppp/chap_ms.h"
 #include "netif/ppp/pppcrypt.h"
 #include "netif/ppp/magic.h"
+#if MPPE_SUPPORT
+#include "netif/ppp/mppe.h" /* For mppe_sha1_pad*, mppe_set_key() */
+#endif /* MPPE_SUPPORT */
 
-#if LWIP_INCLUDED_POLARSSL_MD4
-#include "netif/ppp/polarssl/md4.h"
-#else
-#include "polarssl/md4.h"
-#endif
+#define SHA1_SIGNATURE_SIZE	20
+#define MD4_SIGNATURE_SIZE	16	/* 16 bytes in a MD4 message digest */
+#define MAX_NT_PASSWORD		256	/* Max (Unicode) chars in an NT pass */
 
-#if LWIP_INCLUDED_POLARSSL_SHA1
-#include "netif/ppp/polarssl/sha1.h"
-#else
-#include "polarssl/sha1.h"
-#endif
+#define MS_CHAP_RESPONSE_LEN	49	/* Response length for MS-CHAP */
+#define MS_CHAP2_RESPONSE_LEN	49	/* Response length for MS-CHAPv2 */
+#define MS_AUTH_RESPONSE_LENGTH	40	/* MS-CHAPv2 authenticator response, */
+					/* as ASCII */
 
-#if LWIP_INCLUDED_POLARSSL_DES
-#include "netif/ppp/polarssl/des.h"
-#else
-#include "polarssl/des.h"
-#endif
+/* Error codes for MS-CHAP failure messages. */
+#define MS_CHAP_ERROR_RESTRICTED_LOGON_HOURS	646
+#define MS_CHAP_ERROR_ACCT_DISABLED		647
+#define MS_CHAP_ERROR_PASSWD_EXPIRED		648
+#define MS_CHAP_ERROR_NO_DIALIN_PERMISSION	649
+#define MS_CHAP_ERROR_AUTHENTICATION_FAILURE	691
+#define MS_CHAP_ERROR_CHANGING_PASSWORD		709
 
-#define SHA1_SIGNATURE_SIZE 20
+/*
+ * Offsets within the response field for MS-CHAP
+ */
+#define MS_CHAP_LANMANRESP	0
+#define MS_CHAP_LANMANRESP_LEN	24
+#define MS_CHAP_NTRESP		24
+#define MS_CHAP_NTRESP_LEN	24
+#define MS_CHAP_USENT		48
 
-static void	ascii2unicode (char[], int, u_char[]);
+/*
+ * Offsets within the response field for MS-CHAP2
+ */
+#define MS_CHAP2_PEER_CHALLENGE	0
+#define MS_CHAP2_PEER_CHAL_LEN	16
+#define MS_CHAP2_RESERVED_LEN	8
+#define MS_CHAP2_NTRESP		24
+#define MS_CHAP2_NTRESP_LEN	24
+#define MS_CHAP2_FLAGS		48
+
+#if MPPE_SUPPORT
+#if 0 /* UNUSED */
+/* These values are the RADIUS attribute values--see RFC 2548. */
+#define MPPE_ENC_POL_ENC_ALLOWED 1
+#define MPPE_ENC_POL_ENC_REQUIRED 2
+#define MPPE_ENC_TYPES_RC4_40 2
+#define MPPE_ENC_TYPES_RC4_128 4
+
+/* used by plugins (using above values) */
+extern void set_mppe_enc_types(int, int);
+#endif /* UNUSED */
+#endif /* MPPE_SUPPORT */
+
+/* Are we the authenticator or authenticatee?  For MS-CHAPv2 key derivation. */
+#define MS_CHAP2_AUTHENTICATEE 0
+#define MS_CHAP2_AUTHENTICATOR 1
+
+static void	ascii2unicode (const char[], int, u_char[]);
 static void	NTPasswordHash (u_char *, int, u_char[MD4_SIGNATURE_SIZE]);
-static void	ChallengeResponse (u_char *, u_char *, u_char[24]);
-static void	ChapMS_NT (u_char *, char *, int, u_char[24]);
-static void	ChapMS2_NT (u_char *, u_char[16], char *, char *, int,
+static void	ChallengeResponse (const u_char *, const u_char *, u_char[24]);
+static void	ChallengeHash (const u_char[16], const u_char *, const char *, u_char[8]);
+static void	ChapMS_NT (const u_char *, const char *, int, u_char[24]);
+static void	ChapMS2_NT (const u_char *, const u_char[16], const char *, const char *, int,
 				u_char[24]);
 static void	GenerateAuthenticatorResponsePlain
-			(char*, int, u_char[24], u_char[16], u_char *,
-			     char *, u_char[41]);
+			(const char*, int, u_char[24], const u_char[16], const u_char *,
+			     const char *, u_char[41]);
 #ifdef MSLANMAN
 static void	ChapMS_LANMan (u_char *, char *, int, u_char *);
 #endif
 
-#ifdef MPPE
-static void	Set_Start_Key (u_char *, char *, int);
-static void	SetMasterKeys (char *, int, u_char[24], int);
-#endif
+static void GenerateAuthenticatorResponse(const u_char PasswordHashHash[MD4_SIGNATURE_SIZE],
+			u_char NTResponse[24], const u_char PeerChallenge[16],
+			const u_char *rchallenge, const char *username,
+			u_char authResponse[MS_AUTH_RESPONSE_LENGTH+1]);
+
+#if MPPE_SUPPORT
+static void	Set_Start_Key (ppp_pcb *pcb, const u_char *, const char *, int);
+static void	SetMasterKeys (ppp_pcb *pcb, const char *, int, u_char[24], int);
+#endif /* MPPE_SUPPORT */
+
+static void ChapMS (ppp_pcb *pcb, const u_char *, const char *, int, u_char *);
+static void ChapMS2 (ppp_pcb *pcb, const u_char *, const u_char *, const char *, const char *, int,
+		  u_char *, u_char[MS_AUTH_RESPONSE_LENGTH+1], int);
 
 #ifdef MSLANMAN
 bool	ms_lanman = 0;    	/* Use LanMan password instead of NT */
 			  	/* Has meaning only with MS-CHAP challenges */
 #endif
 
-#ifdef MPPE
-u_char mppe_send_key[MPPE_MAX_KEY_LEN];
-u_char mppe_recv_key[MPPE_MAX_KEY_LEN];
-int mppe_keys_set = 0;		/* Have the MPPE keys been set? */
-
+#if MPPE_SUPPORT
 #ifdef DEBUGMPPEKEY
 /* For MPPE debug */
 /* Use "[]|}{?/><,`!2&&(" (sans quotes) for RFC 3079 MS-CHAPv2 test value */
@@ -152,8 +194,7 @@ static char *mschap2_peer_challenge = NULL;
 
 #include "netif/ppp/fsm.h"		/* Need to poke MPPE options */
 #include "netif/ppp/ccp.h"
-#include <net/ppp-comp.h>
-#endif
+#endif /* MPPE_SUPPORT */
 
 #if PPP_OPTIONS
 /*
@@ -181,33 +222,39 @@ static option_t chapms_option_list[] = {
  * The length goes in challenge[0] and the actual challenge starts
  * at challenge[1].
  */
-static void chapms_generate_challenge(unsigned char *challenge) {
+static void chapms_generate_challenge(ppp_pcb *pcb, unsigned char *challenge) {
+	LWIP_UNUSED_ARG(pcb);
+
 	*challenge++ = 8;
 #ifdef DEBUGMPPEKEY
 	if (mschap_challenge && strlen(mschap_challenge) == 8)
 		memcpy(challenge, mschap_challenge, 8);
 	else
 #endif
-		random_bytes(challenge, 8);
+		magic_random_bytes(challenge, 8);
 }
 
-static void chapms2_generate_challenge(unsigned char *challenge) {
+static void chapms2_generate_challenge(ppp_pcb *pcb, unsigned char *challenge) {
+	LWIP_UNUSED_ARG(pcb);
+
 	*challenge++ = 16;
 #ifdef DEBUGMPPEKEY
 	if (mschap_challenge && strlen(mschap_challenge) == 16)
 		memcpy(challenge, mschap_challenge, 16);
 	else
 #endif
-		random_bytes(challenge, 16);
+		magic_random_bytes(challenge, 16);
 }
 
-static int chapms_verify_response(int id, char *name,
-		       unsigned char *secret, int secret_len,
-		       unsigned char *challenge, unsigned char *response,
+static int chapms_verify_response(ppp_pcb *pcb, int id, const char *name,
+		       const unsigned char *secret, int secret_len,
+		       const unsigned char *challenge, const unsigned char *response,
 		       char *message, int message_space) {
 	unsigned char md[MS_CHAP_RESPONSE_LEN];
 	int diff;
 	int challenge_len, response_len;
+	LWIP_UNUSED_ARG(id);
+	LWIP_UNUSED_ARG(name);
 
 	challenge_len = *challenge++;	/* skip length, is 8 */
 	response_len = *response++;
@@ -223,7 +270,7 @@ static int chapms_verify_response(int id, char *name,
 #endif
 
 	/* Generate the expected response. */
-	ChapMS(challenge, (char *)secret, secret_len, md);
+	ChapMS(pcb, (const u_char *)challenge, (const char *)secret, secret_len, md);
 
 #ifdef MSLANMAN
 	/* Determine which part of response to verify against */
@@ -247,13 +294,14 @@ static int chapms_verify_response(int id, char *name,
 	return 0;
 }
 
-static int chapms2_verify_response(int id, char *name,
-			unsigned char *secret, int secret_len,
-			unsigned char *challenge, unsigned char *response,
+static int chapms2_verify_response(ppp_pcb *pcb, int id, const char *name,
+			const unsigned char *secret, int secret_len,
+			const unsigned char *challenge, const unsigned char *response,
 			char *message, int message_space) {
 	unsigned char md[MS_CHAP2_RESPONSE_LEN];
 	char saresponse[MS_AUTH_RESPONSE_LENGTH+1];
 	int challenge_len, response_len;
+	LWIP_UNUSED_ARG(id);
 
 	challenge_len = *challenge++;	/* skip length, is 16 */
 	response_len = *response++;
@@ -261,8 +309,8 @@ static int chapms2_verify_response(int id, char *name,
 		goto bad;	/* not even the right length */
 
 	/* Generate the expected response and our mutual auth. */
-	ChapMS2(challenge, &response[MS_CHAP2_PEER_CHALLENGE], name,
-		(char *)secret, secret_len, md,
+	ChapMS2(pcb, (const u_char*)challenge, (const u_char*)&response[MS_CHAP2_PEER_CHALLENGE], name,
+		(const char *)secret, secret_len, md,
 		(unsigned char *)saresponse, MS_CHAP2_AUTHENTICATOR);
 
 	/* compare MDs and send the appropriate status */
@@ -323,30 +371,36 @@ static int chapms2_verify_response(int id, char *name,
 }
 #endif /* PPP_SERVER */
 
-static void chapms_make_response(unsigned char *response, int id, char *our_name,
-		     unsigned char *challenge, char *secret, int secret_len,
-		     unsigned char *private) {
+static void chapms_make_response(ppp_pcb *pcb, unsigned char *response, int id, const char *our_name,
+		     const unsigned char *challenge, const char *secret, int secret_len,
+		     unsigned char *private_) {
+	LWIP_UNUSED_ARG(id);
+	LWIP_UNUSED_ARG(our_name);
+	LWIP_UNUSED_ARG(private_);
 	challenge++;	/* skip length, should be 8 */
 	*response++ = MS_CHAP_RESPONSE_LEN;
-	ChapMS(challenge, secret, secret_len, response);
+	ChapMS(pcb, challenge, secret, secret_len, response);
 }
 
-static void chapms2_make_response(unsigned char *response, int id, char *our_name,
-		      unsigned char *challenge, char *secret, int secret_len,
-		      unsigned char *private) {
+static void chapms2_make_response(ppp_pcb *pcb, unsigned char *response, int id, const char *our_name,
+		      const unsigned char *challenge, const char *secret, int secret_len,
+		      unsigned char *private_) {
+	LWIP_UNUSED_ARG(id);
 	challenge++;	/* skip length, should be 16 */
 	*response++ = MS_CHAP2_RESPONSE_LEN;
-	ChapMS2(challenge,
+	ChapMS2(pcb, challenge,
 #ifdef DEBUGMPPEKEY
 		mschap2_peer_challenge,
 #else
 		NULL,
 #endif
-		our_name, secret, secret_len, response, private,
+		our_name, secret, secret_len, response, private_,
 		MS_CHAP2_AUTHENTICATEE);
 }
 
-static int chapms2_check_success(unsigned char *msg, int len, unsigned char *private) {
+static int chapms2_check_success(ppp_pcb *pcb, unsigned char *msg, int len, unsigned char *private_) {
+	LWIP_UNUSED_ARG(pcb);
+
 	if ((len < MS_AUTH_RESPONSE_LENGTH + 2) ||
 	    strncmp((char *)msg, "S=", 2) != 0) {
 		/* Packet does not start with "S=" */
@@ -356,7 +410,7 @@ static int chapms2_check_success(unsigned char *msg, int len, unsigned char *pri
 	msg += 2;
 	len -= 2;
 	if (len < MS_AUTH_RESPONSE_LENGTH
-	    || memcmp(msg, private, MS_AUTH_RESPONSE_LENGTH)) {
+	    || memcmp(msg, private_, MS_AUTH_RESPONSE_LENGTH)) {
 		/* Authenticator Response did not match expected. */
 		ppp_error("MS-CHAPv2 mutual authentication failed.");
 		return 0;
@@ -374,9 +428,11 @@ static int chapms2_check_success(unsigned char *msg, int len, unsigned char *pri
 	return 1;
 }
 
-static void chapms_handle_failure(unsigned char *inp, int len) {
+static void chapms_handle_failure(ppp_pcb *pcb, unsigned char *inp, int len) {
 	int err;
-	char *p, msg[64];
+	const char *p;
+	char msg[64];
+	LWIP_UNUSED_ARG(pcb);
 
 	/* We want a null-terminated string for strxxx(). */
 	len = LWIP_MIN(len, 63);
@@ -437,11 +493,11 @@ print_msg:
 		ppp_error("MS-CHAP authentication failed: %v", p);
 }
 
-static void ChallengeResponse(u_char *challenge,
-		  u_char PasswordHash[MD4_SIGNATURE_SIZE],
+static void ChallengeResponse(const u_char *challenge,
+		  const u_char PasswordHash[MD4_SIGNATURE_SIZE],
 		  u_char response[24]) {
     u_char    ZPasswordHash[21];
-    des_context des;
+    lwip_des_context des;
     u_char des_key[8];
 
     BZERO(ZPasswordHash, sizeof(ZPasswordHash));
@@ -453,27 +509,33 @@ static void ChallengeResponse(u_char *challenge,
 #endif
 
     pppcrypt_56_to_64_bit_key(ZPasswordHash + 0, des_key);
-    des_setkey_enc(&des, des_key);
-    des_crypt_ecb(&des, challenge, response +0);
+    lwip_des_init(&des);
+    lwip_des_setkey_enc(&des, des_key);
+    lwip_des_crypt_ecb(&des, challenge, response +0);
+    lwip_des_free(&des);
 
     pppcrypt_56_to_64_bit_key(ZPasswordHash + 7, des_key);
-    des_setkey_enc(&des, des_key);
-    des_crypt_ecb(&des, challenge, response +8);
+    lwip_des_init(&des);
+    lwip_des_setkey_enc(&des, des_key);
+    lwip_des_crypt_ecb(&des, challenge, response +8);
+    lwip_des_free(&des);
 
     pppcrypt_56_to_64_bit_key(ZPasswordHash + 14, des_key);
-    des_setkey_enc(&des, des_key);
-    des_crypt_ecb(&des, challenge, response +16);
+    lwip_des_init(&des);
+    lwip_des_setkey_enc(&des, des_key);
+    lwip_des_crypt_ecb(&des, challenge, response +16);
+    lwip_des_free(&des);
 
 #if 0
     dbglog("ChallengeResponse - response %.24B", response);
 #endif
 }
 
-void ChallengeHash(u_char PeerChallenge[16], u_char *rchallenge,
-	      char *username, u_char Challenge[8]) {
-    sha1_context	sha1Context;
+static void ChallengeHash(const u_char PeerChallenge[16], const u_char *rchallenge,
+	      const char *username, u_char Challenge[8]) {
+    lwip_sha1_context	sha1Context;
     u_char	sha1Hash[SHA1_SIGNATURE_SIZE];
-    char	*user;
+    const char	*user;
 
     /* remove domain from "domain\username" */
     if ((user = strrchr(username, '\\')) != NULL)
@@ -481,11 +543,13 @@ void ChallengeHash(u_char PeerChallenge[16], u_char *rchallenge,
     else
 	user = username;
 
-    sha1_starts(&sha1Context);
-    sha1_update(&sha1Context, PeerChallenge, 16);
-    sha1_update(&sha1Context, rchallenge, 16);
-    sha1_update(&sha1Context, (unsigned char *)user, strlen(user));
-    sha1_finish(&sha1Context, sha1Hash);
+    lwip_sha1_init(&sha1Context);
+    lwip_sha1_starts(&sha1Context);
+    lwip_sha1_update(&sha1Context, PeerChallenge, 16);
+    lwip_sha1_update(&sha1Context, rchallenge, 16);
+    lwip_sha1_update(&sha1Context, (const unsigned char*)user, strlen(user));
+    lwip_sha1_finish(&sha1Context, sha1Hash);
+    lwip_sha1_free(&sha1Context);
 
     MEMCPY(Challenge, sha1Hash, 8);
 }
@@ -497,7 +561,7 @@ void ChallengeHash(u_char PeerChallenge[16], u_char *rchallenge,
  * is assumed by all M$ CHAP RFCs.  (Unicode byte ordering
  * is machine-dependent.)
  */
-static void ascii2unicode(char ascii[], int ascii_len, u_char unicode[]) {
+static void ascii2unicode(const char ascii[], int ascii_len, u_char unicode[]) {
     int i;
 
     BZERO(unicode, ascii_len * 2);
@@ -506,14 +570,16 @@ static void ascii2unicode(char ascii[], int ascii_len, u_char unicode[]) {
 }
 
 static void NTPasswordHash(u_char *secret, int secret_len, u_char hash[MD4_SIGNATURE_SIZE]) {
-    md4_context		md4Context;
+    lwip_md4_context		md4Context;
 
-    md4_starts(&md4Context);
-    md4_update(&md4Context, secret, secret_len);
-    md4_finish(&md4Context, hash);
+    lwip_md4_init(&md4Context);
+    lwip_md4_starts(&md4Context);
+    lwip_md4_update(&md4Context, secret, secret_len);
+    lwip_md4_finish(&md4Context, hash);
+    lwip_md4_free(&md4Context);
 }
 
-static void ChapMS_NT(u_char *rchallenge, char *secret, int secret_len,
+static void ChapMS_NT(const u_char *rchallenge, const char *secret, int secret_len,
 	  u_char NTResponse[24]) {
     u_char	unicodePassword[MAX_NT_PASSWORD * 2];
     u_char	PasswordHash[MD4_SIGNATURE_SIZE];
@@ -525,8 +591,8 @@ static void ChapMS_NT(u_char *rchallenge, char *secret, int secret_len,
     ChallengeResponse(rchallenge, PasswordHash, NTResponse);
 }
 
-static void ChapMS2_NT(u_char *rchallenge, u_char PeerChallenge[16], char *username,
-	   char *secret, int secret_len, u_char NTResponse[24]) {
+static void ChapMS2_NT(const u_char *rchallenge, const u_char PeerChallenge[16], const char *username,
+	   const char *secret, int secret_len, u_char NTResponse[24]) {
     u_char	unicodePassword[MAX_NT_PASSWORD * 2];
     u_char	PasswordHash[MD4_SIGNATURE_SIZE];
     u_char	Challenge[8];
@@ -548,7 +614,7 @@ static void ChapMS_LANMan(u_char *rchallenge, char *secret, int secret_len,
     int			i;
     u_char		UcasePassword[MAX_NT_PASSWORD]; /* max is actually 14 */
     u_char		PasswordHash[MD4_SIGNATURE_SIZE];
-    des_context des;
+    lwip_des_context des;
     u_char des_key[8];
 
     /* LANMan password is case insensitive */
@@ -557,31 +623,35 @@ static void ChapMS_LANMan(u_char *rchallenge, char *secret, int secret_len,
        UcasePassword[i] = (u_char)toupper(secret[i]);
 
     pppcrypt_56_to_64_bit_key(UcasePassword +0, des_key);
-    des_setkey_enc(&des, des_key);
-    des_crypt_ecb(&des, StdText, PasswordHash +0);
+    lwip_des_init(&des);
+    lwip_des_setkey_enc(&des, des_key);
+    lwip_des_crypt_ecb(&des, StdText, PasswordHash +0);
+    lwip_des_free(&des);
 
     pppcrypt_56_to_64_bit_key(UcasePassword +7, des_key);
-    des_setkey_enc(&des, des_key);
-    des_crypt_ecb(&des, StdText, PasswordHash +8);
+    lwip_des_init(&des);
+    lwip_des_setkey_enc(&des, des_key);
+    lwip_des_crypt_ecb(&des, StdText, PasswordHash +8);
+    lwip_des_free(&des);
 
     ChallengeResponse(rchallenge, PasswordHash, &response[MS_CHAP_LANMANRESP]);
 }
 #endif
 
 
-void GenerateAuthenticatorResponse(u_char PasswordHashHash[MD4_SIGNATURE_SIZE],
-			      u_char NTResponse[24], u_char PeerChallenge[16],
-			      u_char *rchallenge, char *username,
+static void GenerateAuthenticatorResponse(const u_char PasswordHashHash[MD4_SIGNATURE_SIZE],
+			      u_char NTResponse[24], const u_char PeerChallenge[16],
+			      const u_char *rchallenge, const char *username,
 			      u_char authResponse[MS_AUTH_RESPONSE_LENGTH+1]) {
     /*
      * "Magic" constants used in response generation, from RFC 2759.
      */
-    u_char Magic1[39] = /* "Magic server to client signing constant" */
+    static const u_char Magic1[39] = /* "Magic server to client signing constant" */
 	{ 0x4D, 0x61, 0x67, 0x69, 0x63, 0x20, 0x73, 0x65, 0x72, 0x76,
 	  0x65, 0x72, 0x20, 0x74, 0x6F, 0x20, 0x63, 0x6C, 0x69, 0x65,
 	  0x6E, 0x74, 0x20, 0x73, 0x69, 0x67, 0x6E, 0x69, 0x6E, 0x67,
 	  0x20, 0x63, 0x6F, 0x6E, 0x73, 0x74, 0x61, 0x6E, 0x74 };
-    u_char Magic2[41] = /* "Pad to make it do more than one iteration" */
+    static const u_char Magic2[41] = /* "Pad to make it do more than one iteration" */
 	{ 0x50, 0x61, 0x64, 0x20, 0x74, 0x6F, 0x20, 0x6D, 0x61, 0x6B,
 	  0x65, 0x20, 0x69, 0x74, 0x20, 0x64, 0x6F, 0x20, 0x6D, 0x6F,
 	  0x72, 0x65, 0x20, 0x74, 0x68, 0x61, 0x6E, 0x20, 0x6F, 0x6E,
@@ -589,34 +659,38 @@ void GenerateAuthenticatorResponse(u_char PasswordHashHash[MD4_SIGNATURE_SIZE],
 	  0x6E };
 
     int		i;
-    sha1_context	sha1Context;
+    lwip_sha1_context	sha1Context;
     u_char	Digest[SHA1_SIGNATURE_SIZE];
     u_char	Challenge[8];
 
-    sha1_starts(&sha1Context);
-    sha1_update(&sha1Context, PasswordHashHash, MD4_SIGNATURE_SIZE);
-    sha1_update(&sha1Context, NTResponse, 24);
-    sha1_update(&sha1Context, Magic1, sizeof(Magic1));
-    sha1_finish(&sha1Context, Digest);
+    lwip_sha1_init(&sha1Context);
+    lwip_sha1_starts(&sha1Context);
+    lwip_sha1_update(&sha1Context, PasswordHashHash, MD4_SIGNATURE_SIZE);
+    lwip_sha1_update(&sha1Context, NTResponse, 24);
+    lwip_sha1_update(&sha1Context, Magic1, sizeof(Magic1));
+    lwip_sha1_finish(&sha1Context, Digest);
+    lwip_sha1_free(&sha1Context);
 
     ChallengeHash(PeerChallenge, rchallenge, username, Challenge);
 
-    sha1_starts(&sha1Context);
-    sha1_update(&sha1Context, Digest, sizeof(Digest));
-    sha1_update(&sha1Context, Challenge, sizeof(Challenge));
-    sha1_update(&sha1Context, Magic2, sizeof(Magic2));
-    sha1_finish(&sha1Context, Digest);
+    lwip_sha1_init(&sha1Context);
+    lwip_sha1_starts(&sha1Context);
+    lwip_sha1_update(&sha1Context, Digest, sizeof(Digest));
+    lwip_sha1_update(&sha1Context, Challenge, sizeof(Challenge));
+    lwip_sha1_update(&sha1Context, Magic2, sizeof(Magic2));
+    lwip_sha1_finish(&sha1Context, Digest);
+    lwip_sha1_free(&sha1Context);
 
     /* Convert to ASCII hex string. */
-    for (i = 0; i < LWIP_MAX((MS_AUTH_RESPONSE_LENGTH / 2), sizeof(Digest)); i++)
+    for (i = 0; i < LWIP_MAX((MS_AUTH_RESPONSE_LENGTH / 2), (int)sizeof(Digest)); i++)
 	sprintf((char *)&authResponse[i * 2], "%02X", Digest[i]);
 }
 
 
-static void GenerateAuthenticatorResponsePlain
-		(char *secret, int secret_len,
-		 u_char NTResponse[24], u_char PeerChallenge[16],
-		 u_char *rchallenge, char *username,
+static void GenerateAuthenticatorResponsePlain(
+		 const char *secret, int secret_len,
+		 u_char NTResponse[24], const u_char PeerChallenge[16],
+		 const u_char *rchallenge, const char *username,
 		 u_char authResponse[MS_AUTH_RESPONSE_LENGTH+1]) {
     u_char	unicodePassword[MAX_NT_PASSWORD * 2];
     u_char	PasswordHash[MD4_SIGNATURE_SIZE];
@@ -633,75 +707,57 @@ static void GenerateAuthenticatorResponsePlain
 }
 
 
-#ifdef MPPE
-/*
- * Set mppe_xxxx_key from the NTPasswordHashHash.
- * RFC 2548 (RADIUS support) requires us to export this function (ugh).
- */
-void mppe_set_keys(u_char *rchallenge, u_char PasswordHashHash[MD4_SIGNATURE_SIZE]) {
-    sha1_context	sha1Context;
-    u_char	Digest[SHA1_SIGNATURE_SIZE];	/* >= MPPE_MAX_KEY_LEN */
-
-    sha1_starts(&sha1Context);
-    sha1_update(&sha1Context, PasswordHashHash, MD4_SIGNATURE_SIZE);
-    sha1_update(&sha1Context, PasswordHashHash, MD4_SIGNATURE_SIZE);
-    sha1_update(&sha1Context, rchallenge, 8);
-    sha1_finish(&sha1Context, Digest);
-
-    /* Same key in both directions. */
-    MEMCPY(mppe_send_key, Digest, sizeof(mppe_send_key));
-    MEMCPY(mppe_recv_key, Digest, sizeof(mppe_recv_key));
-
-    mppe_keys_set = 1;
-}
-
+#if MPPE_SUPPORT
 /*
  * Set mppe_xxxx_key from MS-CHAP credentials. (see RFC 3079)
  */
-static void Set_Start_Key(u_char *rchallenge, char *secret, int secret_len) {
+static void Set_Start_Key(ppp_pcb *pcb, const u_char *rchallenge, const char *secret, int secret_len) {
     u_char	unicodePassword[MAX_NT_PASSWORD * 2];
     u_char	PasswordHash[MD4_SIGNATURE_SIZE];
     u_char	PasswordHashHash[MD4_SIGNATURE_SIZE];
+    lwip_sha1_context	sha1Context;
+    u_char	Digest[SHA1_SIGNATURE_SIZE];	/* >= MPPE_MAX_KEY_LEN */
 
     /* Hash (x2) the Unicode version of the secret (== password). */
     ascii2unicode(secret, secret_len, unicodePassword);
     NTPasswordHash(unicodePassword, secret_len * 2, PasswordHash);
     NTPasswordHash(PasswordHash, sizeof(PasswordHash), PasswordHashHash);
 
-    mppe_set_keys(rchallenge, PasswordHashHash);
+    lwip_sha1_init(&sha1Context);
+    lwip_sha1_starts(&sha1Context);
+    lwip_sha1_update(&sha1Context, PasswordHashHash, MD4_SIGNATURE_SIZE);
+    lwip_sha1_update(&sha1Context, PasswordHashHash, MD4_SIGNATURE_SIZE);
+    lwip_sha1_update(&sha1Context, rchallenge, 8);
+    lwip_sha1_finish(&sha1Context, Digest);
+    lwip_sha1_free(&sha1Context);
+
+    /* Same key in both directions. */
+    mppe_set_key(pcb, &pcb->mppe_comp, Digest);
+    mppe_set_key(pcb, &pcb->mppe_decomp, Digest);
+
+    pcb->mppe_keys_set = 1;
 }
 
 /*
  * Set mppe_xxxx_key from MS-CHAPv2 credentials. (see RFC 3079)
- *
- * This helper function used in the Winbind module, which gets the
- * NTHashHash from the server.
  */
-void mppe_set_keys2(u_char PasswordHashHash[MD4_SIGNATURE_SIZE],
-	       u_char NTResponse[24], int IsServer) {
-    sha1_context	sha1Context;
+static void SetMasterKeys(ppp_pcb *pcb, const char *secret, int secret_len, u_char NTResponse[24], int IsServer) {
+    u_char	unicodePassword[MAX_NT_PASSWORD * 2];
+    u_char	PasswordHash[MD4_SIGNATURE_SIZE];
+    u_char	PasswordHashHash[MD4_SIGNATURE_SIZE];
+    lwip_sha1_context	sha1Context;
     u_char	MasterKey[SHA1_SIGNATURE_SIZE];	/* >= MPPE_MAX_KEY_LEN */
     u_char	Digest[SHA1_SIGNATURE_SIZE];	/* >= MPPE_MAX_KEY_LEN */
-
-    u_char SHApad1[40] =
-	{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-    u_char SHApad2[40] =
-	{ 0xf2, 0xf2, 0xf2, 0xf2, 0xf2, 0xf2, 0xf2, 0xf2, 0xf2, 0xf2,
-	  0xf2, 0xf2, 0xf2, 0xf2, 0xf2, 0xf2, 0xf2, 0xf2, 0xf2, 0xf2,
-	  0xf2, 0xf2, 0xf2, 0xf2, 0xf2, 0xf2, 0xf2, 0xf2, 0xf2, 0xf2,
-	  0xf2, 0xf2, 0xf2, 0xf2, 0xf2, 0xf2, 0xf2, 0xf2, 0xf2, 0xf2 };
+    const u_char *s;
 
     /* "This is the MPPE Master Key" */
-    u_char Magic1[27] =
+    static const u_char Magic1[27] =
 	{ 0x54, 0x68, 0x69, 0x73, 0x20, 0x69, 0x73, 0x20, 0x74,
 	  0x68, 0x65, 0x20, 0x4d, 0x50, 0x50, 0x45, 0x20, 0x4d,
 	  0x61, 0x73, 0x74, 0x65, 0x72, 0x20, 0x4b, 0x65, 0x79 };
     /* "On the client side, this is the send key; "
        "on the server side, it is the receive key." */
-    u_char Magic2[84] =
+    static const u_char Magic2[84] =
 	{ 0x4f, 0x6e, 0x20, 0x74, 0x68, 0x65, 0x20, 0x63, 0x6c, 0x69,
 	  0x65, 0x6e, 0x74, 0x20, 0x73, 0x69, 0x64, 0x65, 0x2c, 0x20,
 	  0x74, 0x68, 0x69, 0x73, 0x20, 0x69, 0x73, 0x20, 0x74, 0x68,
@@ -713,7 +769,7 @@ void mppe_set_keys2(u_char PasswordHashHash[MD4_SIGNATURE_SIZE],
 	  0x6b, 0x65, 0x79, 0x2e };
     /* "On the client side, this is the receive key; "
        "on the server side, it is the send key." */
-    u_char Magic3[84] =
+    static const u_char Magic3[84] =
 	{ 0x4f, 0x6e, 0x20, 0x74, 0x68, 0x65, 0x20, 0x63, 0x6c, 0x69,
 	  0x65, 0x6e, 0x74, 0x20, 0x73, 0x69, 0x64, 0x65, 0x2c, 0x20,
 	  0x74, 0x68, 0x69, 0x73, 0x20, 0x69, 0x73, 0x20, 0x74, 0x68,
@@ -723,13 +779,19 @@ void mppe_set_keys2(u_char PasswordHashHash[MD4_SIGNATURE_SIZE],
 	  0x69, 0x64, 0x65, 0x2c, 0x20, 0x69, 0x74, 0x20, 0x69, 0x73,
 	  0x20, 0x74, 0x68, 0x65, 0x20, 0x73, 0x65, 0x6e, 0x64, 0x20,
 	  0x6b, 0x65, 0x79, 0x2e };
-    u_char *s;
 
-    sha1_starts(&sha1Context);
-    sha1_update(&sha1Context, PasswordHashHash, MD4_SIGNATURE_SIZE);
-    sha1_update(&sha1Context, NTResponse, 24);
-    sha1_update(&sha1Context, Magic1, sizeof(Magic1));
-    sha1_finish(&sha1Context, MasterKey);
+    /* Hash (x2) the Unicode version of the secret (== password). */
+    ascii2unicode(secret, secret_len, unicodePassword);
+    NTPasswordHash(unicodePassword, secret_len * 2, PasswordHash);
+    NTPasswordHash(PasswordHash, sizeof(PasswordHash), PasswordHashHash);
+
+    lwip_sha1_init(&sha1Context);
+    lwip_sha1_starts(&sha1Context);
+    lwip_sha1_update(&sha1Context, PasswordHashHash, MD4_SIGNATURE_SIZE);
+    lwip_sha1_update(&sha1Context, NTResponse, 24);
+    lwip_sha1_update(&sha1Context, Magic1, sizeof(Magic1));
+    lwip_sha1_finish(&sha1Context, MasterKey);
+    lwip_sha1_free(&sha1Context);
 
     /*
      * generate send key
@@ -738,14 +800,16 @@ void mppe_set_keys2(u_char PasswordHashHash[MD4_SIGNATURE_SIZE],
 	s = Magic3;
     else
 	s = Magic2;
-    sha1_starts(&sha1Context);
-    sha1_update(&sha1Context, MasterKey, 16);
-    sha1_update(&sha1Context, SHApad1, sizeof(SHApad1));
-    sha1_update(&sha1Context, s, 84);
-    sha1_update(&sha1Context, SHApad2, sizeof(SHApad2));
-    sha1_finish(&sha1Context, Digest);
+    lwip_sha1_init(&sha1Context);
+    lwip_sha1_starts(&sha1Context);
+    lwip_sha1_update(&sha1Context, MasterKey, 16);
+    lwip_sha1_update(&sha1Context, mppe_sha1_pad1, SHA1_PAD_SIZE);
+    lwip_sha1_update(&sha1Context, s, 84);
+    lwip_sha1_update(&sha1Context, mppe_sha1_pad2, SHA1_PAD_SIZE);
+    lwip_sha1_finish(&sha1Context, Digest);
+    lwip_sha1_free(&sha1Context);
 
-    MEMCPY(mppe_send_key, Digest, sizeof(mppe_send_key));
+    mppe_set_key(pcb, &pcb->mppe_comp, Digest);
 
     /*
      * generate recv key
@@ -754,37 +818,28 @@ void mppe_set_keys2(u_char PasswordHashHash[MD4_SIGNATURE_SIZE],
 	s = Magic2;
     else
 	s = Magic3;
-    sha1_starts(&sha1Context);
-    sha1_update(&sha1Context, MasterKey, 16);
-    sha1_update(&sha1Context, SHApad1, sizeof(SHApad1));
-    sha1_update(&sha1Context, s, 84);
-    sha1_update(&sha1Context, SHApad2, sizeof(SHApad2));
-    sha1_finish(&sha1Context, Digest);
+    lwip_sha1_init(&sha1Context);
+    lwip_sha1_starts(&sha1Context);
+    lwip_sha1_update(&sha1Context, MasterKey, 16);
+    lwip_sha1_update(&sha1Context, mppe_sha1_pad1, SHA1_PAD_SIZE);
+    lwip_sha1_update(&sha1Context, s, 84);
+    lwip_sha1_update(&sha1Context, mppe_sha1_pad2, SHA1_PAD_SIZE);
+    lwip_sha1_finish(&sha1Context, Digest);
+    lwip_sha1_free(&sha1Context);
 
-    MEMCPY(mppe_recv_key, Digest, sizeof(mppe_recv_key));
+    mppe_set_key(pcb, &pcb->mppe_decomp, Digest);
 
-    mppe_keys_set = 1;
+    pcb->mppe_keys_set = 1;
 }
 
-/*
- * Set mppe_xxxx_key from MS-CHAPv2 credentials. (see RFC 3079)
- */
-static void SetMasterKeys(char *secret, int secret_len, u_char NTResponse[24], int IsServer) {
-    u_char	unicodePassword[MAX_NT_PASSWORD * 2];
-    u_char	PasswordHash[MD4_SIGNATURE_SIZE];
-    u_char	PasswordHashHash[MD4_SIGNATURE_SIZE];
-    /* Hash (x2) the Unicode version of the secret (== password). */
-    ascii2unicode(secret, secret_len, unicodePassword);
-    NTPasswordHash(unicodePassword, secret_len * 2, PasswordHash);
-    NTPasswordHash(PasswordHash, sizeof(PasswordHash), PasswordHashHash);
-    mppe_set_keys2(PasswordHashHash, NTResponse, IsServer);
-}
-
-#endif /* MPPE */
+#endif /* MPPE_SUPPORT */
 
 
-void ChapMS(u_char *rchallenge, char *secret, int secret_len,
+static void ChapMS(ppp_pcb *pcb, const u_char *rchallenge, const char *secret, int secret_len,
        unsigned char *response) {
+#if !MPPE_SUPPORT
+    LWIP_UNUSED_ARG(pcb);
+#endif /* !MPPE_SUPPORT */
     BZERO(response, MS_CHAP_RESPONSE_LEN);
 
     ChapMS_NT(rchallenge, secret, secret_len, &response[MS_CHAP_NTRESP]);
@@ -799,9 +854,9 @@ void ChapMS(u_char *rchallenge, char *secret, int secret_len,
     response[MS_CHAP_USENT] = 1;
 #endif
 
-#ifdef MPPE
-    Set_Start_Key(rchallenge, secret, secret_len);
-#endif
+#if MPPE_SUPPORT
+    Set_Start_Key(pcb, rchallenge, secret, secret_len);
+#endif /* MPPE_SUPPORT */
 }
 
 
@@ -815,19 +870,20 @@ void ChapMS(u_char *rchallenge, char *secret, int secret_len,
  * The PeerChallenge field of response is then used for calculation of the
  * Authenticator Response.
  */
-void ChapMS2(u_char *rchallenge, u_char *PeerChallenge,
-	char *user, char *secret, int secret_len, unsigned char *response,
+static void ChapMS2(ppp_pcb *pcb, const u_char *rchallenge, const u_char *PeerChallenge,
+	const char *user, const char *secret, int secret_len, unsigned char *response,
 	u_char authResponse[], int authenticator) {
     /* ARGSUSED */
-    u_char *p = &response[MS_CHAP2_PEER_CHALLENGE];
-    int i;
+    LWIP_UNUSED_ARG(authenticator);
+#if !MPPE_SUPPORT
+    LWIP_UNUSED_ARG(pcb);
+#endif /* !MPPE_SUPPORT */
 
     BZERO(response, MS_CHAP2_RESPONSE_LEN);
 
     /* Generate the Peer-Challenge if requested, or copy it if supplied. */
     if (!PeerChallenge)
-	for (i = 0; i < MS_CHAP2_PEER_CHAL_LEN; i++)
-	    *p++ = (u_char) (drand48() * 0xff);
+	magic_random_bytes(&response[MS_CHAP2_PEER_CHALLENGE], MS_CHAP2_PEER_CHAL_LEN);
     else
 	MEMCPY(&response[MS_CHAP2_PEER_CHALLENGE], PeerChallenge,
 	      MS_CHAP2_PEER_CHAL_LEN);
@@ -842,13 +898,14 @@ void ChapMS2(u_char *rchallenge, u_char *PeerChallenge,
 				       &response[MS_CHAP2_PEER_CHALLENGE],
 				       rchallenge, user, authResponse);
 
-#ifdef MPPE
-    SetMasterKeys(secret, secret_len,
+#if MPPE_SUPPORT
+    SetMasterKeys(pcb, secret, secret_len,
 		  &response[MS_CHAP2_NTRESP], authenticator);
-#endif
+#endif /* MPPE_SUPPORT */
 }
 
-#ifdef MPPE
+#if 0 /* UNUSED */
+#if MPPE_SUPPORT
 /*
  * Set MPPE options from plugins.
  */
@@ -877,7 +934,8 @@ void set_mppe_enc_types(int policy, int types) {
 	    break;
     }
 }
-#endif /* MPPE */
+#endif /* MPPE_SUPPORT */
+#endif /* UNUSED */
 
 const struct chap_digest_type chapms_digest = {
 	CHAP_MICROSOFT,		/* code */

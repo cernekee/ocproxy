@@ -43,24 +43,18 @@
  * Based on draft-ietf-pppext-eap-srp-03.txt.
  */
 
-#include "lwip/opt.h"
+#include "netif/ppp/ppp_opts.h"
 #if PPP_SUPPORT && EAP_SUPPORT  /* don't build if not configured for use in lwipopts.h */
 
 #include "netif/ppp/ppp_impl.h"
-
-#if LWIP_INCLUDED_POLARSSL_MD5
-#include "netif/ppp/polarssl/md5.h"
-#else
-#include "polarssl/md5.h"
-#endif
-
 #include "netif/ppp/eap.h"
+#include "netif/ppp/magic.h"
+#include "netif/ppp/pppcrypt.h"
 
 #ifdef USE_SRP
 #include <t_pwd.h>
 #include <t_server.h>
 #include <t_client.h>
-#include "netif/ppp/pppcrypt.h"
 #endif /* USE_SRP */
 
 #ifndef SHA_DIGESTSIZE
@@ -107,8 +101,8 @@ static void eap_protrej(ppp_pcb *pcb);
 static void eap_lowerup(ppp_pcb *pcb);
 static void eap_lowerdown(ppp_pcb *pcb);
 #if PRINTPKT_SUPPORT
-static int  eap_printpkt(u_char *inp, int inlen,
-    void (*)(void *arg, char *fmt, ...), void *arg);
+static int  eap_printpkt(const u_char *inp, int inlen,
+    void (*)(void *arg, const char *fmt, ...), void *arg);
 #endif /* PRINTPKT_SUPPORT */
 
 const struct protent eap_protent = {
@@ -123,8 +117,9 @@ const struct protent eap_protent = {
 #if PRINTPKT_SUPPORT
 	eap_printpkt,		/* print a packet in readable form */
 #endif /* PRINTPKT_SUPPORT */
+#if PPP_DATAINPUT
 	NULL,			/* process a received data packet */
-	1,			/* protocol enabled */
+#endif /* PPP_DATAINPUT */
 #if PRINTPKT_SUPPORT
 	"EAP",			/* text name of protocol */
 	NULL,			/* text name of corresponding data protocol */
@@ -187,9 +182,7 @@ static void eap_server_timeout(void *arg);
 /*
  * Convert EAP state code to printable string for debug.
  */
-static const char *
-eap_state_name(esc)
-enum eap_state_code esc;
+static const char * eap_state_name(enum eap_state_code esc)
 {
 	static const char *state_names[] = { EAP_STATES };
 
@@ -204,7 +197,7 @@ static void eap_init(ppp_pcb *pcb) {
 
 	BZERO(&pcb->eap, sizeof(eap_state));
 #if PPP_SERVER
-	pcb->eap.es_server.ea_id = (u_char)(drand48() * 0x100); /* FIXME: use magic.c random function */
+	pcb->eap.es_server.ea_id = magic();
 #endif /* PPP_SERVER */
 }
 
@@ -229,7 +222,7 @@ static void eap_client_timeout(void *arg) {
  * Start client state and wait for requests.  This is called only
  * after eap_lowerup.
  */
-void eap_authwithpeer(ppp_pcb *pcb, char *localname) {
+void eap_authwithpeer(ppp_pcb *pcb, const char *localname) {
 
 	if(NULL == localname)
 		return;
@@ -266,7 +259,7 @@ static void eap_send_failure(ppp_pcb *pcb) {
 		return;
 	}
 
-	outp = p->payload;
+	outp = (u_char*)p->payload;
 
 	MAKEHEADER(outp, PPP_EAP);
 
@@ -297,7 +290,7 @@ static void eap_send_success(ppp_pcb *pcb) {
 		return;
 	}
 
-	outp = p->payload;
+	outp = (u_char*)p->payload;
     
 	MAKEHEADER(outp, PPP_EAP);
 
@@ -431,7 +424,7 @@ u_char *outp;
  */
 static void eap_figure_next_state(ppp_pcb *pcb, int status) {
 #ifdef USE_SRP
-	unsigned char secbuf[MAXWORDLEN], clear[8], *sp, *dp;
+	unsigned char secbuf[MAXSECRETLEN], clear[8], *sp, *dp;
 	struct t_pw tpw;
 	struct t_confent *tce, mytce;
 	char *cp, *cp2;
@@ -646,10 +639,9 @@ static void eap_send_request(ppp_pcb *pcb) {
 	struct pbuf *p;
 	u_char *outp;
 	u_char *lenloc;
-	u_char *ptr;
 	int outlen;
-	int challen;
-	char *str;
+	int len;
+	const char *str;
 #ifdef USE_SRP
 	struct t_server *ts;
 	u_char clear[8], cipher[8], dig[SHA_DIGESTSIZE], *optr, *cp;
@@ -663,14 +655,19 @@ static void eap_send_request(ppp_pcb *pcb) {
 	    pcb->eap.es_server.ea_state != eapInitial) {
 		pcb->eap.es_server.ea_state = eapIdentify;
 #if PPP_REMOTENAME
-		if (pcb->settings.explicit_remote) {
+		if (pcb->settings.explicit_remote && pcb->remote_name) {
 			/*
 			 * If we already know the peer's
 			 * unauthenticated name, then there's no
 			 * reason to ask.  Go to next state instead.
 			 */
-			pcb->eap.es_server.ea_peer = pcb->remote_name;
-			pcb->eap.es_server.ea_peerlen = strlen(pcb->remote_name);
+			int len = (int)strlen(pcb->remote_name);
+			if (len > MAXNAMELEN) {
+				len = MAXNAMELEN;
+			}
+			MEMCPY(pcb->eap.es_server.ea_peer, pcb->remote_name, len);
+			pcb->eap.es_server.ea_peer[len] = '\0';
+			pcb->eap.es_server.ea_peerlen = len;
 			eap_figure_next_state(pcb, 0);
 		}
 #endif /* PPP_REMOTENAME */
@@ -694,7 +691,7 @@ static void eap_send_request(ppp_pcb *pcb) {
 		return;
 	}
 
-	outp = p->payload;
+	outp = (u_char*)p->payload;
     
 	MAKEHEADER(outp, PPP_EAP);
 
@@ -707,9 +704,9 @@ static void eap_send_request(ppp_pcb *pcb) {
 	case eapIdentify:
 		PUTCHAR(EAPT_IDENTITY, outp);
 		str = "Name";
-		challen = strlen(str);
-		MEMCPY(outp, str, challen);
-		INCPTR(challen, outp);
+		len = strlen(str);
+		MEMCPY(outp, str, len);
+		INCPTR(len, outp);
 		break;
 
 	case eapMD5Chall:
@@ -718,14 +715,10 @@ static void eap_send_request(ppp_pcb *pcb) {
 		 * pick a random challenge length between
 		 * EAP_MIN_CHALLENGE_LENGTH and EAP_MAX_CHALLENGE_LENGTH
 		 */
-		challen = (drand48() *
-		    (EAP_MAX_CHALLENGE_LENGTH - EAP_MIN_CHALLENGE_LENGTH)) +
-			    EAP_MIN_CHALLENGE_LENGTH;
-		PUTCHAR(challen, outp);
-		pcb->eap.es_challen = challen;
-		ptr = pcb->eap.es_challenge;
-		while (--challen >= 0)
-			*ptr++ = (u_char) (drand48() * 0x100);
+		pcb->eap.es_challen = EAP_MIN_CHALLENGE_LENGTH +
+		    magic_pow(EAP_MIN_MAX_POWER_OF_TWO_CHALLENGE_LENGTH);
+		PUTCHAR(pcb->eap.es_challen, outp);
+		magic_random_bytes(pcb->eap.es_challenge, pcb->eap.es_challen);
 		MEMCPY(outp, pcb->eap.es_challenge, pcb->eap.es_challen);
 		INCPTR(pcb->eap.es_challen, outp);
 		MEMCPY(outp, pcb->eap.es_server.ea_name, pcb->eap.es_server.ea_namelen);
@@ -809,10 +802,7 @@ static void eap_send_request(ppp_pcb *pcb) {
 			if (i > 0) {
 				MEMCPY(clear, cp, i);
 				cp += i;
-				while (i < 8) {
-					*cp++ = drand48() * 0x100;
-					i++;
-				}
+				magic_random_bytes(cp, 8-i);
 				/* FIXME: if we want to do SRP, we need to find a way to pass the PolarSSL des_context instead of using static memory */
 				(void) DesEncrypt(clear, cipher);
 				outp += b64enc(&b64, cipher, 8, outp);
@@ -824,10 +814,8 @@ static void eap_send_request(ppp_pcb *pcb) {
 			*optr = i;
 			i %= SHA_DIGESTSIZE;
 			if (i != 0) {
-				while (i < SHA_DIGESTSIZE) {
-					*outp++ = drand48() * 0x100;
-					i++;
-				}
+				magic_random_bytes(outp, SHA_DIGESTSIZE-i);
+				INCPTR(SHA_DIGESTSIZE-i, outp);
 			}
 
 			/* Obscure the pseudonym with SHA1 hash */
@@ -855,12 +843,9 @@ static void eap_send_request(ppp_pcb *pcb) {
 	case eapSRP4:
 		PUTCHAR(EAPT_SRP, outp);
 		PUTCHAR(EAPSRP_LWRECHALLENGE, outp);
-		challen = EAP_MIN_CHALLENGE_LENGTH +
-		    ((EAP_MAX_CHALLENGE_LENGTH - EAP_MIN_CHALLENGE_LENGTH) * drand48());
-		pcb->eap.es_challen = challen;
-		ptr = pcb->eap.es_challenge;
-		while (--challen >= 0)
-			*ptr++ = drand48() * 0x100;
+		pcb->eap.es_challen = EAP_MIN_CHALLENGE_LENGTH +
+		    magic_pow(EAP_MIN_MAX_POWER_OF_TWO_CHALLENGE_LENGTH);
+		magic_random_bytes(pcb->eap.es_challenge, pcb->eap.es_challen);
 		MEMCPY(outp, pcb->eap.es_challenge, pcb->eap.es_challen);
 		INCPTR(pcb->eap.es_challen, outp);
 		break;
@@ -888,7 +873,7 @@ static void eap_send_request(ppp_pcb *pcb) {
  * Start server state and send first request.  This is called only
  * after eap_lowerup.
  */
-void eap_authpeer(ppp_pcb *pcb, char *localname) {
+void eap_authpeer(ppp_pcb *pcb, const char *localname) {
 
 	/* Save the name we're given. */
 	pcb->eap.es_server.ea_name = localname;
@@ -965,21 +950,6 @@ static void srp_lwrechallenge(void *arg) {
  * thing.
  */
 static void eap_lowerup(ppp_pcb *pcb) {
-
-	/* Discard any (possibly authenticated) peer name. */
-#if PPP_SERVER
-	if (pcb->eap.es_server.ea_peer != NULL
-#if PPP_REMOTENAME
-	    && pcb->eap.es_server.ea_peer != pcb->remote_name
-#endif /* PPP_REMOTENAME */
-	    )
-		free(pcb->eap.es_server.ea_peer);
-	pcb->eap.es_server.ea_peer = NULL;
-#endif /* PPP_SERVER */
-	if (pcb->eap.es_client.ea_peer != NULL)
-		free(pcb->eap.es_client.ea_peer);
-	pcb->eap.es_client.ea_peer = NULL;
-
 	pcb->eap.es_client.ea_state = eapClosed;
 #if PPP_SERVER
 	pcb->eap.es_server.ea_state = eapClosed;
@@ -1042,7 +1012,7 @@ static void eap_protrej(ppp_pcb *pcb) {
 /*
  * Format and send a regular EAP Response message.
  */
-static void eap_send_response(ppp_pcb *pcb, u_char id, u_char typenum, u_char *str, int lenstr) {
+static void eap_send_response(ppp_pcb *pcb, u_char id, u_char typenum, const u_char *str, int lenstr) {
 	struct pbuf *p;
 	u_char *outp;
 	int msglen;
@@ -1056,7 +1026,7 @@ static void eap_send_response(ppp_pcb *pcb, u_char id, u_char typenum, u_char *s
 		return;
 	}
 
-	outp = p->payload;
+	outp = (u_char*)p->payload;
 
 	MAKEHEADER(outp, PPP_EAP);
 
@@ -1075,7 +1045,7 @@ static void eap_send_response(ppp_pcb *pcb, u_char id, u_char typenum, u_char *s
 /*
  * Format and send an MD5-Challenge EAP Response message.
  */
-static void eap_chap_response(ppp_pcb *pcb, u_char id, u_char *hash, char *name, int namelen) {
+static void eap_chap_response(ppp_pcb *pcb, u_char id, u_char *hash, const char *name, int namelen) {
 	struct pbuf *p;
 	u_char *outp;
 	int msglen;
@@ -1090,7 +1060,7 @@ static void eap_chap_response(ppp_pcb *pcb, u_char id, u_char *hash, char *name,
 		return;
 	}
 
-	outp = p->payload;
+	outp = (u_char*)p->payload;
     
 	MAKEHEADER(outp, PPP_EAP);
 
@@ -1208,7 +1178,7 @@ static void eap_send_nak(ppp_pcb *pcb, u_char id, u_char type) {
 		return;
 	}
 
-	outp = p->payload;
+	outp = (u_char*)p->payload;
 
 	MAKEHEADER(outp, PPP_EAP);
 
@@ -1342,9 +1312,9 @@ static void eap_request(ppp_pcb *pcb, u_char *inp, int id, int len) {
 	u_char typenum;
 	u_char vallen;
 	int secret_len;
-	char secret[MAXWORDLEN];
-	char rhostname[256];
-	md5_context mdContext;
+	char secret[MAXSECRETLEN];
+	char rhostname[MAXNAMELEN];
+	lwip_md5_context mdContext;
 	u_char hash[MD5_SIGNATURE_SIZE];
 #ifdef USE_SRP
 	struct t_client *tc;
@@ -1411,7 +1381,7 @@ static void eap_request(ppp_pcb *pcb, u_char *inp, int id, int len) {
 			pcb->eap.es_usedpseudo = 2;
 		}
 #endif /* USE_SRP */
-		eap_send_response(pcb, id, typenum, (u_char*)pcb->eap.es_client.ea_name,
+		eap_send_response(pcb, id, typenum, (const u_char*)pcb->eap.es_client.ea_name,
 		    pcb->eap.es_client.ea_namelen);
 		break;
 
@@ -1473,13 +1443,15 @@ static void eap_request(ppp_pcb *pcb, u_char *inp, int id, int len) {
 			eap_send_nak(pcb, id, EAPT_SRP);
 			break;
 		}
-		md5_starts(&mdContext);
+		lwip_md5_init(&mdContext);
+		lwip_md5_starts(&mdContext);
 		typenum = id;
-		md5_update(&mdContext, &typenum, 1);
-		md5_update(&mdContext, (u_char *)secret, secret_len);
+		lwip_md5_update(&mdContext, &typenum, 1);
+		lwip_md5_update(&mdContext, (u_char *)secret, secret_len);
 		BZERO(secret, sizeof (secret));
-		md5_update(&mdContext, inp, vallen);
-		md5_finish(&mdContext, hash);
+		lwip_md5_update(&mdContext, inp, vallen);
+		lwip_md5_finish(&mdContext, hash);
+		lwip_md5_free(&mdContext);
 		eap_chap_response(pcb, id, hash, pcb->eap.es_client.ea_name,
 		    pcb->eap.es_client.ea_namelen);
 		break;
@@ -1515,6 +1487,8 @@ static void eap_request(ppp_pcb *pcb, u_char *inp, int id, int len) {
 			/* No session key just yet */
 			pcb->eap.es_client.ea_skey = NULL;
 			if (tc == NULL) {
+				int rhostnamelen;
+
 				GETCHAR(vallen, inp);
 				len--;
 				if (vallen >= len) {
@@ -1538,10 +1512,13 @@ static void eap_request(ppp_pcb *pcb, u_char *inp, int id, int len) {
 					    sizeof (rhostname));
 				}
 
-				if (pcb->eap.es_client.ea_peer != NULL)
-					free(pcb->eap.es_client.ea_peer);
-				pcb->eap.es_client.ea_peer = strdup(rhostname);
-				pcb->eap.es_client.ea_peerlen = strlen(rhostname);
+				rhostnamelen = (int)strlen(rhostname);
+				if (rhostnamelen > MAXNAMELEN) {
+					rhostnamelen = MAXNAMELEN;
+				}
+				MEMCPY(pcb->eap.es_client.ea_peer, rhostname, rhostnamelen);
+				pcb->eap.es_client.ea_peer[rhostnamelen] = '\0';
+				pcb->eap.es_client.ea_peerlen = rhostnamelen;
 
 				GETCHAR(vallen, inp);
 				len--;
@@ -1742,7 +1719,6 @@ client_failure:
 }
 
 #if PPP_SERVER
-/* FIXME: remove malloc() and free() */
 /*
  * eap_response - Receive EAP Response message (server mode).
  */
@@ -1751,8 +1727,8 @@ static void eap_response(ppp_pcb *pcb, u_char *inp, int id, int len) {
 	u_char vallen;
 	int secret_len;
 	char secret[MAXSECRETLEN];
-	char rhostname[256];
-	md5_context mdContext;
+	char rhostname[MAXNAMELEN];
+	lwip_md5_context mdContext;
 	u_char hash[MD5_SIGNATURE_SIZE];
 #ifdef USE_SRP
 	struct t_server *ts;
@@ -1785,17 +1761,8 @@ static void eap_response(ppp_pcb *pcb, u_char *inp, int id, int len) {
 			break;
 		}
 		ppp_info("EAP: unauthenticated peer name \"%.*q\"", len, inp);
-		if (pcb->eap.es_server.ea_peer != NULL
-#if PPP_REMOTENAME
-		    && pcb->eap.es_server.ea_peer != pcb->remote_name
-#endif /* PPP_REMOTENAME */
-		    )
-			free(pcb->eap.es_server.ea_peer);
-		pcb->eap.es_server.ea_peer = malloc(len + 1);
-		if (pcb->eap.es_server.ea_peer == NULL) {
-			pcb->eap.es_server.ea_peerlen = 0;
-			eap_figure_next_state(pcb, 1);
-			break;
+		if (len > MAXNAMELEN) {
+		  len = MAXNAMELEN;
 		}
 		MEMCPY(pcb->eap.es_server.ea_peer, inp, len);
 		pcb->eap.es_server.ea_peer[len] = '\0';
@@ -1904,12 +1871,14 @@ static void eap_response(ppp_pcb *pcb, u_char *inp, int id, int len) {
 			eap_send_failure(pcb);
 			break;
 		}
-		md5_starts(&mdContext);
-		md5_update(&mdContext, &pcb->eap.es_server.ea_id, 1);
-		md5_update(&mdContext, (u_char *)secret, secret_len);
+		lwip_md5_init(&mdContext);
+		lwip_md5_starts(&mdContext);
+		lwip_md5_update(&mdContext, &pcb->eap.es_server.ea_id, 1);
+		lwip_md5_update(&mdContext, (u_char *)secret, secret_len);
 		BZERO(secret, sizeof (secret));
-		md5_update(&mdContext, pcb->eap.es_challenge, pcb->eap.es_challen);
-		md5_finish(&mdContext, hash);
+		lwip_md5_update(&mdContext, pcb->eap.es_challenge, pcb->eap.es_challen);
+		lwip_md5_finish(&mdContext, hash);
+		lwip_md5_free(&mdContext);
 		if (BCMP(hash, inp, MD5_SIGNATURE_SIZE) != 0) {
 			eap_send_failure(pcb);
 			break;
@@ -2046,6 +2015,8 @@ static void eap_response(ppp_pcb *pcb, u_char *inp, int id, int len) {
  * eap_success - Receive EAP Success message (client mode).
  */
 static void eap_success(ppp_pcb *pcb, u_char *inp, int id, int len) {
+	LWIP_UNUSED_ARG(id);
+
 	if (pcb->eap.es_client.ea_state != eapOpen && !eap_client_active(pcb)) {
 		ppp_dbglog("EAP unexpected success message in state %s (%d)",
 		    eap_state_name(pcb->eap.es_client.ea_state),
@@ -2070,6 +2041,8 @@ static void eap_success(ppp_pcb *pcb, u_char *inp, int id, int len) {
  * eap_failure - Receive EAP Failure message (client mode).
  */
 static void eap_failure(ppp_pcb *pcb, u_char *inp, int id, int len) {
+	LWIP_UNUSED_ARG(id);
+
 	if (!eap_client_active(pcb)) {
 		ppp_dbglog("EAP unexpected failure message in state %s (%d)",
 		    eap_state_name(pcb->eap.es_client.ea_state),
@@ -2147,11 +2120,11 @@ static void eap_input(ppp_pcb *pcb, u_char *inp, int inlen) {
 /*
  * eap_printpkt - print the contents of an EAP packet.
  */
-static char *eap_codenames[] = {
+static const char* const eap_codenames[] = {
 	"Request", "Response", "Success", "Failure"
 };
 
-static char *eap_typenames[] = {
+static const char* const eap_typenames[] = {
 	"Identity", "Notification", "Nak", "MD5-Challenge",
 	"OTP", "Generic-Token", NULL, NULL,
 	"RSA", "DSS", "KEA", "KEA-Validate",
@@ -2159,9 +2132,9 @@ static char *eap_typenames[] = {
 	"Cisco", "Nokia", "SRP"
 };
 
-static int eap_printpkt(u_char *inp, int inlen, void (*printer) (void *, char *, ...), void *arg) {
+static int eap_printpkt(const u_char *inp, int inlen, void (*printer) (void *, const char *, ...), void *arg) {
 	int code, id, len, rtype, vallen;
-	u_char *pstart;
+	const u_char *pstart;
 	u32_t uval;
 
 	if (inlen < EAP_HEADERLEN)
@@ -2173,7 +2146,7 @@ static int eap_printpkt(u_char *inp, int inlen, void (*printer) (void *, char *,
 	if (len < EAP_HEADERLEN || len > inlen)
 		return (0);
 
-	if (code >= 1 && code <= sizeof(eap_codenames) / sizeof(char *))
+	if (code >= 1 && code <= (int)LWIP_ARRAYSIZE(eap_codenames))
 		printer(arg, " %s", eap_codenames[code-1]);
 	else
 		printer(arg, " code=0x%x", code);
@@ -2187,8 +2160,7 @@ static int eap_printpkt(u_char *inp, int inlen, void (*printer) (void *, char *,
 		}
 		GETCHAR(rtype, inp);
 		len--;
-		if (rtype >= 1 &&
-		    rtype <= sizeof (eap_typenames) / sizeof (char *))
+		if (rtype >= 1 && rtype <= (int)LWIP_ARRAYSIZE(eap_typenames))
 			printer(arg, " %s", eap_typenames[rtype-1]);
 		else
 			printer(arg, " type=0x%x", rtype);
@@ -2197,7 +2169,7 @@ static int eap_printpkt(u_char *inp, int inlen, void (*printer) (void *, char *,
 		case EAPT_NOTIFICATION:
 			if (len > 0) {
 				printer(arg, " <Message ");
-				ppp_print_string((char *)inp, len, printer, arg);
+				ppp_print_string(inp, len, printer, arg);
 				printer(arg, ">");
 				INCPTR(len, inp);
 				len = 0;
@@ -2218,7 +2190,7 @@ static int eap_printpkt(u_char *inp, int inlen, void (*printer) (void *, char *,
 			len -= vallen;
 			if (len > 0) {
 				printer(arg, " <Name ");
-				ppp_print_string((char *)inp, len, printer, arg);
+				ppp_print_string(inp, len, printer, arg);
 				printer(arg, ">");
 				INCPTR(len, inp);
 				len = 0;
@@ -2241,7 +2213,7 @@ static int eap_printpkt(u_char *inp, int inlen, void (*printer) (void *, char *,
 					goto truncated;
 				if (vallen > 0) {
 					printer(arg, " <Name ");
-					ppp_print_string((char *)inp, vallen, printer,
+					ppp_print_string(inp, vallen, printer,
 					    arg);
 					printer(arg, ">");
 				} else {
@@ -2283,7 +2255,7 @@ static int eap_printpkt(u_char *inp, int inlen, void (*printer) (void *, char *,
 				break;
 
 			case EAPSRP_SVALIDATOR:
-				if (len < sizeof (u32_t))
+				if (len < (int)sizeof (u32_t))
 					break;
 				GETLONG(uval, inp);
 				len -= sizeof (u32_t);
@@ -2312,7 +2284,11 @@ static int eap_printpkt(u_char *inp, int inlen, void (*printer) (void *, char *,
 				INCPTR(len, inp);
 				len = 0;
 				break;
+			default:
+				break;
 			}
+			break;
+		default:
 			break;
 		}
 		break;
@@ -2322,8 +2298,7 @@ static int eap_printpkt(u_char *inp, int inlen, void (*printer) (void *, char *,
 			break;
 		GETCHAR(rtype, inp);
 		len--;
-		if (rtype >= 1 &&
-		    rtype <= sizeof (eap_typenames) / sizeof (char *))
+		if (rtype >= 1 && rtype <= (int)LWIP_ARRAYSIZE(eap_typenames))
 			printer(arg, " %s", eap_typenames[rtype-1]);
 		else
 			printer(arg, " type=0x%x", rtype);
@@ -2331,7 +2306,7 @@ static int eap_printpkt(u_char *inp, int inlen, void (*printer) (void *, char *,
 		case EAPT_IDENTITY:
 			if (len > 0) {
 				printer(arg, " <Name ");
-				ppp_print_string((char *)inp, len, printer, arg);
+				ppp_print_string(inp, len, printer, arg);
 				printer(arg, ">");
 				INCPTR(len, inp);
 				len = 0;
@@ -2346,8 +2321,7 @@ static int eap_printpkt(u_char *inp, int inlen, void (*printer) (void *, char *,
 			GETCHAR(rtype, inp);
 			len--;
 			printer(arg, " <Suggested-type %02X", rtype);
-			if (rtype >= 1 &&
-			    rtype < sizeof (eap_typenames) / sizeof (char *))
+			if (rtype >= 1 && rtype < (int)LWIP_ARRAYSIZE(eap_typenames))
 				printer(arg, " (%s)", eap_typenames[rtype-1]);
 			printer(arg, ">");
 			break;
@@ -2366,7 +2340,7 @@ static int eap_printpkt(u_char *inp, int inlen, void (*printer) (void *, char *,
 			len -= vallen;
 			if (len > 0) {
 				printer(arg, " <Name ");
-				ppp_print_string((char *)inp, len, printer, arg);
+				ppp_print_string(inp, len, printer, arg);
 				printer(arg, ">");
 				INCPTR(len, inp);
 				len = 0;
@@ -2389,7 +2363,7 @@ static int eap_printpkt(u_char *inp, int inlen, void (*printer) (void *, char *,
 				break;
 
 			case EAPSRP_CVALIDATOR:
-				if (len < sizeof (u32_t))
+				if (len < (int)sizeof (u32_t))
 					break;
 				GETLONG(uval, inp);
 				len -= sizeof (u32_t);
@@ -2417,13 +2391,18 @@ static int eap_printpkt(u_char *inp, int inlen, void (*printer) (void *, char *,
 				INCPTR(vallen, inp);
 				len -= vallen;
 				break;
+			default:
+				break;
 			}
+			break;
+		default:
 			break;
 		}
 		break;
 
 	case EAP_SUCCESS:	/* No payload expected for these! */
 	case EAP_FAILURE:
+	default:
 		break;
 
 	truncated:

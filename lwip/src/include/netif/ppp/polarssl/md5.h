@@ -33,7 +33,7 @@
  *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "lwip/opt.h"
+#include "netif/ppp/ppp_opts.h"
 #if LWIP_INCLUDED_POLARSSL_MD5
 
 #ifndef LWIP_INCLUDED_POLARSSL_MD5_H
@@ -68,7 +68,7 @@ void md5_starts( md5_context *ctx );
  * \param input    buffer holding the  data
  * \param ilen     length of the input data
  */
-void md5_update( md5_context *ctx, unsigned char *input, int ilen );
+void md5_update( md5_context *ctx, const unsigned char *input, int ilen );
 
 /**
  * \brief          MD5 final digest

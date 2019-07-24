@@ -2,7 +2,7 @@ The lwIP PPP support is based from pppd 2.4.5 (http://ppp.samba.org) with
 huge changes to match code size and memory requirements for embedded devices.
 
 Anyway, pppd has a mature codebase for years and the average commit count
-is getting low on their Git repositories, meaning that we can follow what
+is getting low on their Git repository, meaning that we can follow what
 is happening on their side and merge what is relevant for lwIP.
 
 So, here is the pppd follow up, so that we don't get away too far from pppd.
@@ -312,3 +312,162 @@ Solaris port, don't care.
   4043750fca36e7e0eb90d702e048ad1da4929418
 
 Just release stuff.
+
+
+2014-02-18 - pppd: Add option "stop-bits" to set number of serial port stop bits.
+  ad993a20ee485f0d0e2ac4105221641b200da6e2
+
+Low level serial port, not in the port.
+
+
+2014-03-09 - pppd: Separate IPv6 handling for sifup/sifdown
+  b04d2dc6df5c6b5650fea44250d58757ee3dac4a
+
+Reimplemented.
+
+
+2014-03-09 - pppol2tp: Connect up/down events to notifiers and add IPv6 ones
+  fafbe50251efc7d6b4a8be652d085316e112b34f
+
+Not in the port.
+
+
+2014-03-09 - pppd: Add declarations to eliminate compile warnings
+  50967962addebe15c7a7e63116ff46a0441dc464
+
+We are handling compilation warnings on our own
+
+
+2014-03-09 - pppd: Eliminate some unnecessary ifdefs
+  de8da14d845ee6db9236ccfddabf1d8ebf045ddb
+
+We mostly did that previously. Anyway, merged 2014-12-24.
+
+
+2014-08-01 - radius: Fix realms-config-file option
+  880a81be7c8e0fe8567227bc17a1bff3ea035943
+
+Radius plugin, not in the port.
+
+
+2014-08-01 - pppd: Eliminate potential integer overflow in option parsing
+  7658e8257183f062dc01f87969c140707c7e52cb
+
+pppd config file parser, not in the port.
+
+
+2014-08-01 - pppd: Eliminate memory leak with multiple instances of a string option
+  b94b7fbbaa0589aa6ec5fdc733aeb9ff294d2656
+
+pppd config file parser, not in the port.
+
+
+2014-08-01 - pppd: Fix a stack variable overflow in MSCHAP-v2
+  36733a891fb56594fcee580f667b33a64b990981
+
+This fixes a bug introduced in 08ef47ca ("pppd: Make MSCHAP-v2 cope better with packet loss").
+
+We didn't merge 08ef47ca ;-)
+
+
+2014-08-01 - winbind plugin: Add -DMPPE=1 to eliminate compiler warnings
+  2b05e22c62095e97dd0a97e4b5588402c2185071
+
+Linux plugin, not in the port.
+
+
+2014-08-09 - Update README and patchlevel for 2.4.7 release
+  6e8eaa7a78b31cdab2edf140a9c8afdb02ffaca5
+
+Just release stuff.
+
+
+2014-08-10 - abort on errors in subdir builds
+  5e90783d11a59268e05f4cfb29ce2343b13e8ab2
+
+Linux Makefile, not in the port.
+
+
+2014-06-03 - pppd: add support for defaultroute-metric option
+  35e5a569c988b1ff865b02a24d9a727a00db4da9
+
+Only necessary for Linux, lwIP does not support route metrics.
+
+
+2014-12-13 - scripts: Avoid killing wrong pppd
+  67811a647d399db5d188a242827760615a0f86b5
+
+pppd helper script, not in the port.
+
+
+2014-12-20 - pppd: Fix sign-extension when displaying bytes in octal
+  5e8c3cb256a7e86e3572a82a75d51c6850efdbdc
+
+Merged 2016-07-02.
+
+
+2015-03-01 - Suppress false error message on PPPoE disconnect
+  219aac3b53d0827549377f1bfe22853ee52d4405
+
+PPPoE plugin, not in the port.
+
+
+2015-03-01 - Send PADT on PPPoE disconnect
+  cd2c14f998c57bbe6a01dc5854f2763c0d7f31fb
+
+PPPoE plugin, not in the port. And our PPPoE implementation already does
+that: pppoe_disconnect() calls pppoe_send_padt().
+
+
+2015-08-14 - pppd: ipxcp: Prevent buffer overrun on remote router name
+  fe149de624f96629a7f46732055d8f718c74b856
+
+We never ported IPX support. lwIP does not support IPX.
+
+
+2015-03-25 - pppd: Fix ccp_options.mppe type
+  234edab99a6bb250cc9ecd384cca27b0c8b475ce
+
+We found that while working on MPPE support in lwIP, that's our patch ;-)
+
+
+2015-03-24 - pppd: Fix ccp_cilen calculated size if both deflate_correct and deflate_draft are enabled
+  094cb8ae4c61db225e67fedadb4964f846dd0c27
+
+We found that while working on MPPE support in lwIP, that's our patch ;-)
+
+
+2015-08-14 - Merge branch 'master' of https://github.com/ncopa/ppp
+  3a5c9a8fbc8970375cd881151d44e4b6fe249c6a
+
+Merge commit, we don't care.
+
+
+2015-08-14 - Merge branch 'master' of git://github.com/vapier/ppp
+  912e4fc6665aca188dced7ea7fdc663ce5a2dd24
+
+Merge commit, we don't care.
+
+
+2015-08-14 - Merge branch 'bug_fix' of git://github.com/radaiming/ppp
+  dfd33d7f526ecd7b39dd1bba8101260d02af5ebb
+
+Merge commit, we don't care.
+
+
+2015-08-14 - Merge branch 'master' of git://github.com/pprindeville/ppp
+  aa4a985f6114d08cf4e47634fb6325da71016473
+
+Merge commit, we don't care.
+
+
+2015-08-14 - Merge branch 'no-error-on-already-closed' of git://github.com/farnz/ppp
+  6edf252483b30dbcdcc5059f01831455365d5b6e
+
+Merge commit, we don't care.
+
+
+2015-08-14 - Merge branch 'send-padt-on-disconnect' of git://github.com/farnz/ppp
+  84684243d651f55f6df69d2a6707b52fbbe62bb9
+
+Merge commit, we don't care.

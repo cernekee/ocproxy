@@ -3,9 +3,6 @@ AUTOMAKE_OPTIONS	= foreign subdir-objects
 AM_CFLAGS		= @WFLAGS@ -Dunix -DIPv4 \
 			  -I$(srcdir)/lwip/src \
 			  -I$(srcdir)/lwip/src/include \
-			  -I$(srcdir)/lwip/src/include/ipv4 \
-			  -I$(srcdir)/lwip/src/include/ipv6 \
-			  -I$(srcdir)/contrib/ports/unix/include \
 			  -I$(srcdir)/src
 
 LWIP_SOURCES		:= \
@@ -43,7 +40,6 @@ LWIP_SOURCES		:= \
 			   lwip/src/include/lwip/tcp.h \
 			   lwip/src/include/lwip/tcp_impl.h \
 			   lwip/src/include/lwip/tcpip.h \
-			   lwip/src/include/lwip/timers.h \
 			   lwip/src/include/lwip/udp.h \
 			   lwip/src/include/netif/etharp.h \
 			   lwip/src/include/netif/slipif.h \
@@ -54,6 +50,7 @@ LWIP_SOURCES		:= \
 			   lwip/src/core/dns.c \
 			   lwip/src/core/inet_chksum.c \
 			   lwip/src/core/init.c \
+			   lwip/src/core/ip.c \
 			   lwip/src/core/mem.c \
 			   lwip/src/core/memp.c \
 			   lwip/src/core/netif.c \
@@ -63,7 +60,7 @@ LWIP_SOURCES		:= \
 			   lwip/src/core/tcp.c \
 			   lwip/src/core/tcp_in.c \
 			   lwip/src/core/tcp_out.c \
-			   lwip/src/core/timers.c \
+			   lwip/src/core/timeouts.c \
 			   lwip/src/core/udp.c \
 			   lwip/src/include/ipv4/lwip/autoip.h \
 			   lwip/src/include/ipv4/lwip/icmp.h \
@@ -71,7 +68,7 @@ LWIP_SOURCES		:= \
 			   lwip/src/include/ipv4/lwip/inet.h \
 			   lwip/src/include/ipv4/lwip/ip4_addr.h \
 			   lwip/src/include/ipv4/lwip/ip4.h \
-			   lwip/src/include/ipv4/lwip/ip_frag.h \
+			   lwip/src/include/ipv4/lwip/ip4_frag.h \
 			   lwip/src/include/ipv6/lwip/icmp6.h \
 			   lwip/src/include/ipv6/lwip/ip6_addr.h \
 			   lwip/src/include/ipv6/lwip/ip6.h \
@@ -81,7 +78,7 @@ LWIP_SOURCES		:= \
 			   lwip/src/core/ipv4/icmp.c \
 			   lwip/src/core/ipv4/ip4.c \
 			   lwip/src/core/ipv4/ip4_addr.c \
-			   lwip/src/core/ipv4/ip_frag.c \
+			   lwip/src/core/ipv4/ip4_frag.c \
 			   lwip/src/api/api_lib.c \
 			   lwip/src/api/api_msg.c \
 			   lwip/src/api/err.c \
@@ -100,11 +97,7 @@ LWIP_SOURCES		:= \
 			   contrib/ports/unix/include/netif/tcpdump.h \
 			   contrib/ports/unix/include/netif/tunif.h \
 			   contrib/ports/unix/include/netif/unixif.h \
-			   contrib/ports/unix/lwip_chksum.c \
-			   contrib/ports/unix/perf.c \
-			   contrib/ports/unix/sys_arch.c \
-			   contrib/ports/unix/netif/list.c \
-			   contrib/ports/unix/netif/tcpdump.c
+			   lwip/contrib/ports/unix/port/sys_arch.c
 
 APP_SOURCES		:= src/ocproxy.c src/lwipopts.h
 

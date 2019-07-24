@@ -67,22 +67,26 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "lwip/opt.h"
+#include "netif/ppp/ppp_opts.h"
 #if PPP_SUPPORT && PPPOE_SUPPORT /* don't build if not configured for use in lwipopts.h */
 
 #ifndef PPP_OE_H
 #define PPP_OE_H
 
 #include "ppp.h"
-#include "netif/etharp.h"
+#include "lwip/etharp.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #ifdef PACK_STRUCT_USE_INCLUDES
 #  include "arch/bpstruct.h"
 #endif
 PACK_STRUCT_BEGIN
 struct pppoehdr {
-  PACK_STRUCT_FIELD(u8_t vertype);
-  PACK_STRUCT_FIELD(u8_t code);
+  PACK_STRUCT_FLD_8(u8_t vertype);
+  PACK_STRUCT_FLD_8(u8_t code);
   PACK_STRUCT_FIELD(u16_t session);
   PACK_STRUCT_FIELD(u16_t plen);
 } PACK_STRUCT_STRUCT;
@@ -112,10 +116,6 @@ PACK_STRUCT_END
 /* passive */
 #define PPPOE_STATE_PADO_SENT 1
 
-#define PPPOE_CB_STATE_UP       0 /* PPPoE link is UP */
-#define PPPOE_CB_STATE_DOWN     1 /* PPPoE link is DOWN - normal condition */
-#define PPPOE_CB_STATE_FAILED   2 /* Failed to setup PPPoE link */
-
 #define PPPOE_HEADERLEN       sizeof(struct pppoehdr)
 #define PPPOE_VERTYPE         0x11    /* VER=1, TYPE = 1 */
 
@@ -144,16 +144,15 @@ struct pppoe_softc {
   struct pppoe_softc *next;
   struct netif *sc_ethif;      /* ethernet interface we are using */
   ppp_pcb *pcb;                /* PPP PCB */
-  void (*sc_link_status_cb)(ppp_pcb *pcb, int up);
 
   struct eth_addr sc_dest;     /* hardware address of concentrator */
   u16_t sc_session;            /* PPPoE session id */
   u8_t sc_state;               /* discovery phase or session connected */
 
-#ifdef PPPOE_TODO
-  u8_t *sc_service_name;       /* if != NULL: requested name of service */
-  u8_t *sc_concentrator_name;  /* if != NULL: requested concentrator id */
-#endif /* PPPOE_TODO */
+#if PPPOE_SCNAME_SUPPORT
+  const char *sc_service_name;      /* if != NULL: requested name of service */
+  const char *sc_concentrator_name; /* if != NULL: requested concentrator id */
+#endif /* PPPOE_SCNAME_SUPPORT */
   u8_t sc_ac_cookie[PPPOE_MAX_AC_COOKIE_LEN]; /* content of AC cookie we must echo back */
   u8_t sc_ac_cookie_len;       /* length of cookie data */
 #ifdef PPPOE_SERVER
@@ -167,16 +166,21 @@ struct pppoe_softc {
 
 #define pppoe_init() /* compatibility define, no initialization needed */
 
-err_t pppoe_create(struct netif *ethif, ppp_pcb *pcb, void (*link_status_cb)(ppp_pcb *pcb, int up), struct pppoe_softc **scptr);
-err_t pppoe_destroy(struct pppoe_softc *sc);
+ppp_pcb *pppoe_create(struct netif *pppif,
+       struct netif *ethif,
+       const char *service_name, const char *concentrator_name,
+       ppp_link_status_cb_fn link_status_cb, void *ctx_cb);
 
-int pppoe_connect(struct pppoe_softc *sc);
-void pppoe_disconnect(struct pppoe_softc *sc);
-
+/*
+ * Functions called from lwIP
+ * DO NOT CALL FROM lwIP USER APPLICATION.
+ */
 void pppoe_disc_input(struct netif *netif, struct pbuf *p);
 void pppoe_data_input(struct netif *netif, struct pbuf *p);
 
-err_t pppoe_xmit(struct pppoe_softc *sc, struct pbuf *pb);
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* PPP_OE_H */
 

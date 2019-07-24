@@ -42,13 +42,17 @@
  * $Id: fsm.h,v 1.10 2004/11/13 02:28:15 paulus Exp $
  */
 
-#include "lwip/opt.h"
+#include "netif/ppp/ppp_opts.h"
 #if PPP_SUPPORT /* don't build if not configured for use in lwipopts.h */
 
 #ifndef FSM_H
 #define	FSM_H
 
 #include "ppp.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /*
  * Packet header = Code, id, length.
@@ -74,7 +78,7 @@
 typedef struct fsm {
     ppp_pcb *pcb;		/* PPP Interface */
     const struct fsm_callbacks *callbacks;	/* Callback routines */
-    char *term_reason;		/* Reason for closing protocol */
+    const char *term_reason;	/* Reason for closing protocol */
     u8_t seen_ack;		/* Have received valid Ack/Nak/Rej to Req */
 				  /* -- This is our only flag, we might use u_int :1 if we have more flags */
     u16_t protocol;		/* Data Link Layer Protocol field value */
@@ -120,7 +124,7 @@ typedef struct fsm_callbacks {
 		(fsm *);
     int  (*extcode)		/* Called when unknown code received */
 		(fsm *, int, int, u_char *, int);
-    char *proto_name;		/* String name for protocol (for messages) */
+    const char *proto_name;	/* String name for protocol (for messages) */
 } fsm_callbacks;
 
 
@@ -150,12 +154,12 @@ typedef struct fsm_callbacks {
 /*
  * Timeouts.
  */
-#if 0 /* moved to opt.h */
+#if 0 /* moved to ppp_opts.h */
 #define DEFTIMEOUT	3	/* Timeout time in seconds */
 #define DEFMAXTERMREQS	2	/* Maximum Terminate-Request transmissions */
 #define DEFMAXCONFREQS	10	/* Maximum Configure-Request transmissions */
 #define DEFMAXNAKLOOPS	5	/* Maximum number of nak loops */
-#endif /* moved to opt.h */
+#endif /* moved to ppp_opts.h */
 
 
 /*
@@ -165,11 +169,14 @@ void fsm_init(fsm *f);
 void fsm_lowerup(fsm *f);
 void fsm_lowerdown(fsm *f);
 void fsm_open(fsm *f);
-void fsm_close(fsm *f, char *reason);
+void fsm_close(fsm *f, const char *reason);
 void fsm_input(fsm *f, u_char *inpacket, int l);
 void fsm_protreject(fsm *f);
-void fsm_sdata(fsm *f, u_char code, u_char id, u_char *data, int datalen);
+void fsm_sdata(fsm *f, u_char code, u_char id, const u_char *data, int datalen);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* FSM_H */
 #endif /* PPP_SUPPORT */

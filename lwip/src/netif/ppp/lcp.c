@@ -40,11 +40,11 @@
  * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "lwip/opt.h"
+#include "netif/ppp/ppp_opts.h"
 #if PPP_SUPPORT /* don't build if not configured for use in lwipopts.h */
 
 /*
- * TODO:
+ * @todo:
  */
 
 #if 0 /* UNUSED */
@@ -268,8 +268,8 @@ static void lcp_init(ppp_pcb *pcb);
 static void lcp_input(ppp_pcb *pcb, u_char *p, int len);
 static void lcp_protrej(ppp_pcb *pcb);
 #if PRINTPKT_SUPPORT
-static int lcp_printpkt(u_char *p, int plen,
-		void (*printer) (void *, char *, ...), void *arg);
+static int lcp_printpkt(const u_char *p, int plen,
+		void (*printer) (void *, const char *, ...), void *arg);
 #endif /* PRINTPKT_SUPPORT */
 
 const struct protent lcp_protent = {
@@ -284,8 +284,9 @@ const struct protent lcp_protent = {
 #if PRINTPKT_SUPPORT
     lcp_printpkt,
 #endif /* PRINTPKT_SUPPORT */
+#if PPP_DATAINPUT
     NULL,
-    1,
+#endif /* PPP_DATAINPUT */
 #if PRINTPKT_SUPPORT
     "LCP",
     NULL,
@@ -372,7 +373,7 @@ static void lcp_init(ppp_pcb *pcb) {
 
     BZERO(wo, sizeof(*wo));
     wo->neg_mru = 1;
-    wo->mru = DEFMRU;
+    wo->mru = PPP_DEFMRU;
     wo->neg_asyncmap = 1;
     wo->neg_magicnumber = 1;
     wo->neg_pcompression = 1;
@@ -380,7 +381,7 @@ static void lcp_init(ppp_pcb *pcb) {
 
     BZERO(ao, sizeof(*ao));
     ao->neg_mru = 1;
-    ao->mru = MAXMRU;
+    ao->mru = PPP_MAXMRU;
     ao->neg_asyncmap = 1;
 #if CHAP_SUPPORT
     ao->neg_chap = 1;
@@ -396,24 +397,6 @@ static void lcp_init(ppp_pcb *pcb) {
     ao->neg_pcompression = 1;
     ao->neg_accompression = 1;
     ao->neg_endpoint = 1;
-
-#if PPPOS_SUPPORT
-    /*
-     * Set transmit escape for the flag and escape characters plus anything
-     * set for the allowable options.
-     */
-    memset(pcb->xmit_accm, 0, sizeof(ext_accm));
-    pcb->xmit_accm[15] = 0x60;
-    pcb->xmit_accm[0]  = (u_char)((ao->asyncmap        & 0xFF));
-    pcb->xmit_accm[1]  = (u_char)((ao->asyncmap >> 8)  & 0xFF);
-    pcb->xmit_accm[2]  = (u_char)((ao->asyncmap >> 16) & 0xFF);
-    pcb->xmit_accm[3]  = (u_char)((ao->asyncmap >> 24) & 0xFF);
-    LCPDEBUG(("lcp_init: xmit_accm=%X %X %X %X\n",
-	  pcb->xmit_accm[0],
-          pcb->xmit_accm[1],
-          pcb->xmit_accm[2],
-          pcb->xmit_accm[3]));
-#endif /* PPPOS_SUPPORT */
 }
 
 
@@ -436,11 +419,15 @@ void lcp_open(ppp_pcb *pcb) {
 /*
  * lcp_close - Take LCP down.
  */
-void lcp_close(ppp_pcb *pcb, char *reason) {
+void lcp_close(ppp_pcb *pcb, const char *reason) {
     fsm *f = &pcb->lcp_fsm;
     int oldstate;
 
-    if (pcb->phase != PPP_PHASE_DEAD && pcb->phase != PPP_PHASE_MASTER)
+    if (pcb->phase != PPP_PHASE_DEAD
+#ifdef HAVE_MULTILINK
+    && pcb->phase != PPP_PHASE_MASTER
+#endif /* HAVE_MULTILINK */
+    )
 	new_phase(pcb, PPP_PHASE_TERMINATE);
 
     if (f->flags & DELAYED_UP) {
@@ -469,35 +456,17 @@ void lcp_close(ppp_pcb *pcb, char *reason) {
  */
 void lcp_lowerup(ppp_pcb *pcb) {
     lcp_options *wo = &pcb->lcp_wantoptions;
-#if PPPOS_SUPPORT
-    lcp_options *ao = &pcb->lcp_allowoptions;
-#endif /* PPPOS_SUPPORT */
     fsm *f = &pcb->lcp_fsm;
     /*
      * Don't use A/C or protocol compression on transmission,
      * but accept A/C and protocol compressed packets
      * if we are going to ask for A/C and protocol compression.
      */
-#if PPPOS_SUPPORT
-    ppp_set_xaccm(pcb, &pcb->xmit_accm);
-#endif /* PPPOS_SUPPORT */
     if (ppp_send_config(pcb, PPP_MRU, 0xffffffff, 0, 0) < 0
 	|| ppp_recv_config(pcb, PPP_MRU, (pcb->settings.lax_recv? 0: 0xffffffff),
 			   wo->neg_pcompression, wo->neg_accompression) < 0)
 	    return;
     pcb->peer_mru = PPP_MRU;
-
-#if PPPOS_SUPPORT
-    ao->asyncmap = (u_long)pcb->xmit_accm[0]
-                                   | ((u_long)pcb->xmit_accm[1] << 8)
-                                   | ((u_long)pcb->xmit_accm[2] << 16)
-                                   | ((u_long)pcb->xmit_accm[3] << 24);
-    LCPDEBUG(("lcp_lowerup: asyncmap=%X %X %X %X\n",
-              pcb->xmit_accm[3],
-              pcb->xmit_accm[2],
-              pcb->xmit_accm[1],
-              pcb->xmit_accm[0]));
-#endif /* PPPOS_SUPPORT */
 
     if (pcb->settings.listen_time != 0) {
 	f->flags |= DELAYED_UP;
@@ -525,7 +494,7 @@ void lcp_lowerdown(ppp_pcb *pcb) {
  * lcp_delayed_up - Bring the lower layer up now.
  */
 static void lcp_delayed_up(void *arg) {
-    fsm *f = arg;
+    fsm *f = (fsm*)arg;
 
     if (f->flags & DELAYED_UP) {
 	f->flags &= ~DELAYED_UP;
@@ -622,7 +591,7 @@ static void lcp_rprotrej(fsm *f, u_char *inp, int len) {
      * Upcall the proper Protocol-Reject routine.
      */
     for (i = 0; (protp = protocols[i]) != NULL; ++i)
-	if (protp->protocol == prot && protp->enabled_flag) {
+	if (protp->protocol == prot) {
 #if PPP_PROTOCOLNAME
 	    if (pname != NULL)
 		ppp_dbglog("Protocol-Reject for '%s' (0x%x) received", pname,
@@ -685,6 +654,95 @@ static void lcp_resetci(fsm *f) {
     lcp_options *go = &pcb->lcp_gotoptions;
     lcp_options *ao = &pcb->lcp_allowoptions;
 
+#if PPP_AUTH_SUPPORT
+
+    /* note: default value is true for allow options */
+    if (pcb->settings.user && pcb->settings.passwd) {
+#if PAP_SUPPORT
+      if (pcb->settings.refuse_pap) {
+        ao->neg_upap = 0;
+      }
+#endif /* PAP_SUPPORT */
+#if CHAP_SUPPORT
+      if (pcb->settings.refuse_chap) {
+        ao->chap_mdtype &= ~MDTYPE_MD5;
+      }
+#if MSCHAP_SUPPORT
+      if (pcb->settings.refuse_mschap) {
+        ao->chap_mdtype &= ~MDTYPE_MICROSOFT;
+      }
+      if (pcb->settings.refuse_mschap_v2) {
+        ao->chap_mdtype &= ~MDTYPE_MICROSOFT_V2;
+      }
+#endif /* MSCHAP_SUPPORT */
+      ao->neg_chap = (ao->chap_mdtype != MDTYPE_NONE);
+#endif /* CHAP_SUPPORT */
+#if EAP_SUPPORT
+      if (pcb->settings.refuse_eap) {
+        ao->neg_eap = 0;
+      }
+#endif /* EAP_SUPPORT */
+
+#if PPP_SERVER
+      /* note: default value is false for wanted options */
+      if (pcb->settings.auth_required) {
+#if PAP_SUPPORT
+        if (!pcb->settings.refuse_pap) {
+          wo->neg_upap = 1;
+        }
+#endif /* PAP_SUPPORT */
+#if CHAP_SUPPORT
+        if (!pcb->settings.refuse_chap) {
+          wo->chap_mdtype |= MDTYPE_MD5;
+        }
+#if MSCHAP_SUPPORT
+        if (!pcb->settings.refuse_mschap) {
+          wo->chap_mdtype |= MDTYPE_MICROSOFT;
+        }
+        if (!pcb->settings.refuse_mschap_v2) {
+          wo->chap_mdtype |= MDTYPE_MICROSOFT_V2;
+        }
+#endif /* MSCHAP_SUPPORT */
+        wo->neg_chap = (wo->chap_mdtype != MDTYPE_NONE);
+#endif /* CHAP_SUPPORT */
+#if EAP_SUPPORT
+        if (!pcb->settings.refuse_eap) {
+          wo->neg_eap = 1;
+        }
+#endif /* EAP_SUPPORT */
+      }
+#endif /* PPP_SERVER */
+
+    } else {
+#if PAP_SUPPORT
+      ao->neg_upap = 0;
+#endif /* PAP_SUPPORT */
+#if CHAP_SUPPORT
+      ao->neg_chap = 0;
+      ao->chap_mdtype = MDTYPE_NONE;
+#endif /* CHAP_SUPPORT */
+#if EAP_SUPPORT
+      ao->neg_eap = 0;
+#endif /* EAP_SUPPORT */
+    }
+
+    PPPDEBUG(LOG_DEBUG, ("ppp: auth protocols:"));
+#if PAP_SUPPORT
+    PPPDEBUG(LOG_DEBUG, (" PAP=%d", ao->neg_upap));
+#endif /* PAP_SUPPORT */
+#if CHAP_SUPPORT
+    PPPDEBUG(LOG_DEBUG, (" CHAP=%d CHAP_MD5=%d", ao->neg_chap, !!(ao->chap_mdtype&MDTYPE_MD5)));
+#if MSCHAP_SUPPORT
+    PPPDEBUG(LOG_DEBUG, (" CHAP_MS=%d CHAP_MS2=%d", !!(ao->chap_mdtype&MDTYPE_MICROSOFT), !!(ao->chap_mdtype&MDTYPE_MICROSOFT_V2)));
+#endif /* MSCHAP_SUPPORT */
+#endif /* CHAP_SUPPORT */
+#if EAP_SUPPORT
+    PPPDEBUG(LOG_DEBUG, (" EAP=%d", ao->neg_eap));
+#endif /* EAP_SUPPORT */
+    PPPDEBUG(LOG_DEBUG, ("\n"));
+
+#endif /* PPP_AUTH_SUPPORT */
+
     wo->magicnumber = magic();
     wo->numloops = 0;
     *go = *wo;
@@ -700,7 +758,9 @@ static void lcp_resetci(fsm *f) {
     if (pcb->settings.noendpoint)
 	ao->neg_endpoint = 0;
     pcb->peer_mru = PPP_MRU;
+#if 0 /* UNUSED */
     auth_reset(pcb);
+#endif /* UNUSED */
 }
 
 
@@ -726,7 +786,7 @@ static int lcp_cilen(fsm *f) {
      * accept more than one.  We prefer EAP first, then CHAP, then
      * PAP.
      */
-    return (LENCISHORT(go->neg_mru && go->mru != DEFMRU) +
+    return (LENCISHORT(go->neg_mru && go->mru != PPP_DEFMRU) +
 	    LENCILONG(go->neg_asyncmap && go->asyncmap != 0xFFFFFFFF) +
 #if EAP_SUPPORT
 	    LENCISHORT(go->neg_eap) +
@@ -827,7 +887,7 @@ static void lcp_addci(fsm *f, u_char *ucp, int *lenp) {
 	    PUTCHAR(val[i], ucp); \
     }
 
-    ADDCISHORT(CI_MRU, go->neg_mru && go->mru != DEFMRU, go->mru);
+    ADDCISHORT(CI_MRU, go->neg_mru && go->mru != PPP_DEFMRU, go->mru);
     ADDCILONG(CI_ASYNCMAP, go->neg_asyncmap && go->asyncmap != 0xFFFFFFFF,
 	      go->asyncmap);
 #if EAP_SUPPORT
@@ -1001,7 +1061,7 @@ static int lcp_ackci(fsm *f, u_char *p, int len) {
 	} \
     }
 
-    ACKCISHORT(CI_MRU, go->neg_mru && go->mru != DEFMRU, go->mru);
+    ACKCISHORT(CI_MRU, go->neg_mru && go->mru != PPP_DEFMRU, go->mru);
     ACKCILONG(CI_ASYNCMAP, go->neg_asyncmap && go->asyncmap != 0xFFFFFFFF,
 	      go->asyncmap);
 #if EAP_SUPPORT
@@ -1178,9 +1238,9 @@ static int lcp_nakci(fsm *f, u_char *p, int len, int treat_as_reject) {
      * If they send us a bigger MRU than what we asked, accept it, up to
      * the limit of the default MRU we'd get if we didn't negotiate.
      */
-    if (go->neg_mru && go->mru != DEFMRU) {
+    if (go->neg_mru && go->mru != PPP_DEFMRU) {
 	NAKCISHORT(CI_MRU, neg_mru,
-		   if (cishort <= wo->mru || cishort <= DEFMRU)
+		   if (cishort <= wo->mru || cishort <= PPP_DEFMRU)
 		       try_.mru = cishort;
 		   );
     }
@@ -1382,6 +1442,8 @@ static int lcp_nakci(fsm *f, u_char *p, int len, int treat_as_reject) {
 		       try_.mrru = cishort;
 		   );
     }
+#else /* HAVE_MULTILINK */
+    LWIP_UNUSED_ARG(treat_as_reject);
 #endif /* HAVE_MULTILINK */
 
     /*
@@ -1421,11 +1483,11 @@ static int lcp_nakci(fsm *f, u_char *p, int len, int treat_as_reject) {
 
 	switch (citype) {
 	case CI_MRU:
-	    if ((go->neg_mru && go->mru != DEFMRU)
+	    if ((go->neg_mru && go->mru != PPP_DEFMRU)
 		|| no.neg_mru || cilen != CILEN_SHORT)
 		goto bad;
 	    GETSHORT(cishort, p);
-	    if (cishort < DEFMRU) {
+	    if (cishort < PPP_DEFMRU) {
 		try_.neg_mru = 1;
 		try_.mru = cishort;
 	    }
@@ -1485,6 +1547,8 @@ static int lcp_nakci(fsm *f, u_char *p, int len, int treat_as_reject) {
 	    if (go->neg_endpoint || no.neg_endpoint || cilen < CILEN_CHAR)
 		goto bad;
 	    break;
+	default:
+	    break;
 	}
 	p = next;
     }
@@ -1496,9 +1560,8 @@ static int lcp_nakci(fsm *f, u_char *p, int len, int treat_as_reject) {
     if (f->state != PPP_FSM_OPENED) {
 	if (looped_back) {
 	    if (++try_.numloops >= pcb->settings.lcp_loopbackfail) {
-		int errcode = PPPERR_LOOPBACK;
 		ppp_notice("Serial line is looped back.");
-		ppp_ioctl(pcb, PPPCTLS_ERRCODE, &errcode);
+		pcb->err_code = PPPERR_LOOPBACK;
 		lcp_close(f->pcb, "Loopback detected");
 	    }
 	} else
@@ -1788,7 +1851,7 @@ static int lcp_reqci(fsm *f, u_char *inp, int *lenp, int reject_if_disagree) {
         return 0;
     }
 
-    nakoutp = nakp->payload;
+    nakoutp = (u_char*)nakp->payload;
     rejp = inp;
     while (l) {
 	orc = CONFACK;			/* Assume success */
@@ -1822,11 +1885,11 @@ static int lcp_reqci(fsm *f, u_char *inp, int *lenp, int reject_if_disagree) {
 	     * No need to check a maximum.  If he sends a large number,
 	     * we'll just ignore it.
 	     */
-	    if (cishort < MINMRU) {
+	    if (cishort < PPP_MINMRU) {
 		orc = CONFNAK;		/* Nak CI */
 		PUTCHAR(CI_MRU, nakoutp);
 		PUTCHAR(CILEN_SHORT, nakoutp);
-		PUTSHORT(MINMRU, nakoutp);	/* Give him a hint */
+		PUTSHORT(PPP_MINMRU, nakoutp);	/* Give him a hint */
 		break;
 	    }
 	    ho->neg_mru = 1;		/* Remember he sent MRU */
@@ -2211,6 +2274,8 @@ endswitch:
     case CONFREJ:
 	*lenp = rejp - inp;
 	break;
+    default:
+	break;
     }
 
     pbuf_free(nakp);
@@ -2309,17 +2374,17 @@ static void lcp_finished(fsm *f) {
 /*
  * lcp_printpkt - print the contents of an LCP packet.
  */
-static char *lcp_codenames[] = {
+static const char* const lcp_codenames[] = {
     "ConfReq", "ConfAck", "ConfNak", "ConfRej",
     "TermReq", "TermAck", "CodeRej", "ProtRej",
     "EchoReq", "EchoRep", "DiscReq", "Ident",
     "TimeRem"
 };
 
-static int lcp_printpkt(u_char *p, int plen,
-		void (*printer) (void *, char *, ...), void *arg) {
+static int lcp_printpkt(const u_char *p, int plen,
+		void (*printer) (void *, const char *, ...), void *arg) {
     int code, id, len, olen, i;
-    u_char *pstart, *optend;
+    const u_char *pstart, *optend;
     u_short cishort;
     u32_t cilong;
 
@@ -2332,7 +2397,7 @@ static int lcp_printpkt(u_char *p, int plen,
     if (len < HEADERLEN || len > plen)
 	return 0;
 
-    if (code >= 1 && code <= sizeof(lcp_codenames) / sizeof(char *))
+   if (code >= 1 && code <= (int)LWIP_ARRAYSIZE(lcp_codenames))
 	printer(arg, " %s", lcp_codenames[code-1]);
     else
 	printer(arg, " code=0x%x", code);
@@ -2400,6 +2465,8 @@ static int lcp_printpkt(u_char *p, int plen,
 				++p;
 				break;
 #endif /* MSCHAP_SUPPORT */
+			    default:
+				break;
 			    }
 			}
 			break;
@@ -2495,6 +2562,8 @@ static int lcp_printpkt(u_char *p, int plen,
 		printer(arg, "endpoint");
 #endif
 		break;
+	    default:
+		break;
 	    }
 	    while (p < optend) {
 		GETCHAR(code, p);
@@ -2508,7 +2577,7 @@ static int lcp_printpkt(u_char *p, int plen,
     case TERMREQ:
 	if (len > 0 && *p >= ' ' && *p < 0x7f) {
 	    printer(arg, " ");
-	    ppp_print_string((char *)p, len, printer, arg);
+	    ppp_print_string(p, len, printer, arg);
 	    p += len;
 	    len = 0;
 	}
@@ -2540,10 +2609,12 @@ static int lcp_printpkt(u_char *p, int plen,
 	}
 	if (len > 0) {
 	    printer(arg, " ");
-	    ppp_print_string((char *)p, len, printer, arg);
+	    ppp_print_string(p, len, printer, arg);
 	    p += len;
 	    len = 0;
 	}
+	break;
+    default:
 	break;
     }
 
@@ -2568,10 +2639,9 @@ static int lcp_printpkt(u_char *p, int plen,
 static void LcpLinkFailure(fsm *f) {
     ppp_pcb *pcb = f->pcb;
     if (f->state == PPP_FSM_OPENED) {
-	int errcode = PPPERR_PEERDEAD;
 	ppp_info("No response to %d echo-requests", pcb->lcp_echos_pending);
         ppp_notice("Serial link appears to be disconnected.");
-	ppp_ioctl(pcb, PPPCTLS_ERRCODE, &errcode);
+	pcb->err_code = PPPERR_PEERDEAD;
 	lcp_close(pcb, "Peer not responding");
     }
 }
@@ -2616,16 +2686,17 @@ static void LcpEchoTimeout(void *arg) {
 static void lcp_received_echo_reply(fsm *f, int id, u_char *inp, int len) {
     ppp_pcb *pcb = f->pcb;
     lcp_options *go = &pcb->lcp_gotoptions;
-    u32_t magic;
+    u32_t magic_val;
+    LWIP_UNUSED_ARG(id);
 
     /* Check the magic number - don't count replies from ourselves. */
     if (len < 4) {
 	ppp_dbglog("lcp: received short Echo-Reply, length %d", len);
 	return;
     }
-    GETLONG(magic, inp);
+    GETLONG(magic_val, inp);
     if (go->neg_magicnumber
-	&& magic == go->magicnumber) {
+	&& magic_val == go->magicnumber) {
 	ppp_warn("appear to have received our own echo-reply!");
 	return;
     }

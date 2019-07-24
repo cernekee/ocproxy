@@ -57,7 +57,7 @@
  * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "lwip/opt.h"
+#include "netif/ppp/ppp_opts.h"
 #if PPP_SUPPORT && ECP_SUPPORT  /* don't build if not configured for use in lwipopts.h */
 
 #include <string.h>
@@ -91,7 +91,7 @@ static void ecp_input (int unit, u_char *pkt, int len);
 static void ecp_protrej (int unit);
 */
 #if PRINTPKT_SUPPORT
-static int  ecp_printpkt (u_char *pkt, int len,
+static int  ecp_printpkt (const u_char *pkt, int len,
 			      void (*printer) (void *, char *, ...),
 			      void *arg);
 #endif /* PRINTPKT_SUPPORT */
@@ -111,8 +111,9 @@ const struct protent ecp_protent = {
 #if PRINTPKT_SUPPORT
     ecp_printpkt,
 #endif /* PRINTPKT_SUPPORT */
+#if PPP_DATAINPUT
     NULL, /* ecp_datainput, */
-    0,
+#endif /* PPP_DATAINPUT */
 #if PRINTPKT_SUPPORT
     "ECP",
     "Encrypted",
@@ -165,10 +166,12 @@ ecp_init(unit)
     f->callbacks = &ecp_callbacks;
     fsm_init(f);
 
+#if 0 /* Not necessary, everything is cleared in ppp_new() */
     memset(&ecp_wantoptions[unit],  0, sizeof(ecp_options));
     memset(&ecp_gotoptions[unit],   0, sizeof(ecp_options));
     memset(&ecp_allowoptions[unit], 0, sizeof(ecp_options));
     memset(&ecp_hisoptions[unit],   0, sizeof(ecp_options));
+#endif /* 0 */
 
 }
 
@@ -176,7 +179,7 @@ ecp_init(unit)
 #if PRINTPKT_SUPPORT
 static int
 ecp_printpkt(p, plen, printer, arg)
-    u_char *p;
+    const u_char *p;
     int plen;
     void (*printer) (void *, char *, ...);
     void *arg;

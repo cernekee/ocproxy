@@ -33,7 +33,7 @@
  *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "lwip/opt.h"
+#include "netif/ppp/ppp_opts.h"
 #if LWIP_INCLUDED_POLARSSL_MD4
 
 #ifndef LWIP_INCLUDED_POLARSSL_MD4_H
@@ -68,7 +68,7 @@ void md4_starts( md4_context *ctx );
  * \param input    buffer holding the  data
  * \param ilen     length of the input data
  */
-void md4_update( md4_context *ctx, unsigned char *input, int ilen );
+void md4_update( md4_context *ctx, const unsigned char *input, int ilen );
 
 /**
  * \brief          MD4 final digest
