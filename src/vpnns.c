@@ -498,6 +498,12 @@ static int create_ns(const char *statedir, const char *name)
 		pdie("can't set hostname");
 	setup_ipv4("lo", "127.0.0.1", "255.0.0.0", false, 0);
 
+        // disable nscd
+
+        mount("empty", "/var/run/nscd", "tmpfs", 0, "");
+
+        // overlay /etc
+
 	mkdir(statedir, 0755);
 	char *local_etc = populate_statedir(statedir, "etc", true);
 	char *workdir = populate_statedir(statedir, "workdir", true);
