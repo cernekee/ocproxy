@@ -13,8 +13,10 @@ Basic usage
 Commonly used options include:
 
       -D port                   Set up a SOCKS5 server on PORT
+      -H port                   Set up an HTTP proxy server on PORT
       -L lport:rhost:rport      Connections to localhost:LPORT will be redirected
                                 over the VPN to RHOST:RPORT
+      -l file, --logfile file   Log all proxy requests to FILE
       -g                        Allow non-local clients.
       -k interval               Send TCP keepalive every INTERVAL seconds, to
                                 prevent connection timeouts
@@ -26,9 +28,15 @@ openconnect using the --script-tun option:
         "./ocproxy -L 2222:unix-host:22 -L 3389:win-host:3389 -D 11080" \
         vpn.example.com
 
+You can also use the HTTP proxy with `-H`:
+
+    openconnect --script-tun --script \
+        "./ocproxy -H 8080 -D 11080" \
+        vpn.example.com
+
 Once ocproxy is running, connections can be established over the VPN link
 by connecting directly to a forwarded port or by utilizing the builtin
-SOCKS server:
+SOCKS or HTTP proxy servers:
 
     ssh -p2222 localhost
     rdesktop localhost
@@ -37,6 +45,59 @@ SOCKS server:
     ...
 
 OpenConnect can (and should) be run as a non-root user when using ocproxy.
+
+
+Logging
+-------
+
+ocproxy can log all proxy requests to a file using the `-l` or `--logfile` option:
+
+    openconnect --script-tun --script \
+        "./ocproxy -H 8080 -D 11080 -l /var/log/ocproxy.log" \
+        vpn.example.com
+
+The log file will contain timestamped entries for all connection requests through the proxy:
+
+**Log format examples:**
+
+    [2025-01-15 14:23:45] HTTP GET -> http://example.com/page.html
+    [2025-01-15 14:23:46] HTTPS CONNECT -> https://secure.example.com:443/
+    [2025-01-15 14:23:47] SOCKS5 -> mail.example.com:993
+    [2025-01-15 14:23:48] PORT-FWD -> internal-server:22
+
+The log includes:
+- **Timestamp** in format `YYYY-MM-DD HH:MM:SS`
+- **Protocol type**: HTTP, HTTPS, SOCKS5, or PORT-FWD
+- **HTTP method** for HTTP requests (GET, POST, PUT, DELETE, etc.)
+- **Full URL** for HTTP/HTTPS requests
+- **Destination hostname/IP and port** for all connection types
+
+The log file is opened in append mode, so logs persist across multiple ocproxy sessions.
+
+
+Using the HTTP proxy
+---------------------
+
+The HTTP proxy supports both regular HTTP methods (GET, POST, PUT, DELETE, etc.)
+and the CONNECT method for tunneling HTTPS connections. This provides full
+HTTP/HTTPS proxy functionality.
+
+You can configure your browser or other applications to use the HTTP proxy
+for both HTTP and HTTPS connections.
+
+To configure the HTTP proxy in your browser:
+- Set HTTP proxy to 127.0.0.1 port 8080 (or the port specified with -H)
+- Set HTTPS proxy to the same address and port
+
+The HTTP proxy can be used alongside the SOCKS5 proxy. Some applications
+may work better with HTTP proxy (browsers), while others may prefer SOCKS5.
+
+Supported features:
+- Full HTTP/1.x proxy with all standard methods (GET, POST, PUT, DELETE, HEAD, OPTIONS, etc.)
+- HTTPS tunneling via CONNECT method
+- Both absolute URLs (http://host/path) and relative URLs with Host header
+- Automatic DNS resolution for hostnames
+- HTTP keep-alive connections
 
 
 Using the SOCKS5 proxy
@@ -87,11 +148,31 @@ Dependencies:
  * automake
  * gcc, binutils, make, etc.
 
-Building from git:
+Building from git on Linux:
 
     ./autogen.sh
     ./configure
     make
+
+Building from git on macOS:
+
+First, install dependencies using Homebrew:
+
+    brew install libevent automake autoconf
+
+Then build with the correct library paths:
+
+    ./autogen.sh
+    ./configure \
+      CPPFLAGS="-I/opt/homebrew/opt/libevent/include" \
+      LDFLAGS="-L/opt/homebrew/opt/libevent/lib"
+    make
+
+Note: For Intel Macs, use `/usr/local` instead of `/opt/homebrew`:
+
+    ./configure \
+      CPPFLAGS="-I/usr/local/opt/libevent/include" \
+      LDFLAGS="-L/usr/local/opt/libevent/lib"
 
 
 Other possible uses for ocproxy

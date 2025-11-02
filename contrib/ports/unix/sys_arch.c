@@ -134,10 +134,16 @@ sys_thread_new(const char *name, lwip_thread_fn function, void *arg, int stacksi
   LWIP_UNUSED_ARG(stacksize);
   LWIP_UNUSED_ARG(prio);
 
+  /* Wrapper to handle function signature mismatch */
+  union {
+    lwip_thread_fn in;
+    void *(*out)(void *);
+  } fn_cast;
+  fn_cast.in = function;
+  
   code = pthread_create(&tmp,
                         NULL, 
-                        (void *(*)(void *)) 
-                        function, 
+                        fn_cast.out, 
                         arg);
   
   if (0 == code) {
