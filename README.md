@@ -1,3 +1,25 @@
+## This fork: fixed upload throughput on macOS (and small-buffer systems)
+
+Stock ocproxy silently **drops upstream packets** when the `--script-tun`
+socketpair to openconnect is full (`lwip_data_out` counted a link-level drop
+and moved on). On macOS the socketpair holds only ~2 datagrams
+(`net.local.dgram.recvspace` = 4 KB), so any upload burst overflows it; lwIP
+then stalls in ~1 s retransmission timeouts and uploads collapse to roughly
+one send window per second — **~60 KB/s measured, while downloads ran at
+4 MB/s** on the same VPN.
+
+This branch adds lossless backpressure: on `EAGAIN`/`ENOBUFS` the packet is
+queued (bounded FIFO) and flushed when the fd turns writable. It also hardens
+the VPN read path (`EAGAIN` is not a dead VPN, and the stock code fell
+through to `pbuf_alloc()` with a negative length after `vpn_conn_down()`).
+
+Measured on a production AnyConnect VPN (macOS arm64):
+uploads **61 KB/s → 1.9 MB/s** (single stream) and **3.8 MB/s sustained**;
+downloads unchanged. Linux is less affected (~200 KB default buffers) but
+the drop-instead-of-backpressure behavior is the same.
+
+---
+
 ocproxy
 =======
 

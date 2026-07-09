@@ -166,6 +166,84 @@ struct socks_reply {
 
 static struct event_base *event_base;
 
+/* --- VPN-fd write backpressure ------------------------------------------
+ * The socketpair to openconnect has tiny kernel buffers on macOS (unix
+ * dgram recvspace defaults to 4KB = ~2 packets). Stock ocproxy DROPPED
+ * upstream packets when writev() hit EAGAIN/ENOBUFS, collapsing lwIP into
+ * retransmission timeouts (~one send window per second: uploads at
+ * ~60KB/s while downloads ran at MB/s). Instead of dropping, queue the
+ * packet and flush when the fd becomes writable — lossless backpressure.
+ */
+struct vpn_pkt {
+	struct vpn_pkt *next;
+	int len;
+	char data[];
+};
+static struct vpn_pkt *vpn_q_head, *vpn_q_tail;
+static int vpn_q_len;                 /* packets queued */
+static long vpn_q_deferred;           /* stats: packets that hit backpressure */
+static long vpn_q_dropped;            /* stats: queue overflow drops */
+#define VPN_Q_MAX 4096                /* ~4MB worst case; lwIP snd_buf bounds it in practice */
+static struct event *vpn_wr_ev;
+static int vpn_wr_fd = -1;
+
+static void vpn_writable_cb(evutil_socket_t fd, short what, void *ctx)
+{
+	while (vpn_q_head) {
+		struct vpn_pkt *pkt = vpn_q_head;
+		ssize_t ret = write(fd, pkt->data, pkt->len);
+		if (ret < 0) {
+			if (errno == EAGAIN || errno == EWOULDBLOCK || errno == ENOBUFS) {
+				event_add(vpn_wr_ev, NULL);   /* still full — try again later */
+				return;
+			}
+			/* fatal-ish: fall through and drop this packet */
+		}
+		vpn_q_head = pkt->next;
+		if (!vpn_q_head)
+			vpn_q_tail = NULL;
+		vpn_q_len--;
+		free(pkt);
+	}
+}
+
+static int vpn_q_push(int fd, const struct iovec *iov, int iovcnt, int total)
+{
+	struct vpn_pkt *pkt;
+	int i, off = 0;
+
+	if (vpn_q_len >= VPN_Q_MAX) {
+		vpn_q_dropped++;
+		return -1;
+	}
+	pkt = malloc(sizeof(*pkt) + total);
+	if (!pkt)
+		return -1;
+	pkt->next = NULL;
+	pkt->len = total;
+	for (i = 0; i < iovcnt; i++) {
+		memcpy(pkt->data + off, iov[i].iov_base, iov[i].iov_len);
+		off += iov[i].iov_len;
+	}
+	if (vpn_q_tail)
+		vpn_q_tail->next = pkt;
+	else
+		vpn_q_head = pkt;
+	vpn_q_tail = pkt;
+	vpn_q_len++;
+	vpn_q_deferred++;
+
+	if (!vpn_wr_ev || vpn_wr_fd != fd) {
+		if (vpn_wr_ev)
+			event_free(vpn_wr_ev);
+		vpn_wr_ev = event_new(event_base, fd, EV_WRITE, vpn_writable_cb, NULL);
+		vpn_wr_fd = fd;
+	}
+	event_add(vpn_wr_ev, NULL);
+	return 0;
+}
+/* ------------------------------------------------------------------------ */
+
 static struct ocp_sock ocp_sock_pool[MAX_CONN];
 static struct ocp_sock *ocp_sock_free_list;
 static struct ocp_sock *ocp_sock_bind_list;
@@ -666,8 +744,13 @@ static void lwip_data_cb(evutil_socket_t fd, short what, void *ctx)
 
 	len = read(s->fd, s->sockbuf, SOCKBUF_LEN);
 	if (len <= 0) {
-		/* This might never happen, because s->fd is a DGRAM socket */
+		/* Spurious wakeup on the nonblocking socketpair is not a dead
+		 * VPN. (Also: never fall through with len<=0 — the stock code
+		 * continued into pbuf_alloc with a negative length.) */
+		if (len < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR))
+			return;
 		vpn_conn_down();
+		return;
 	}
 	if ((p = pbuf_alloc(PBUF_RAW, len, PBUF_POOL)) != NULL) {
 		char *bufptr;
@@ -713,11 +796,23 @@ static err_t lwip_data_out(struct netif *netif, struct pbuf *p, ip_addr_t *ipadd
 		total += p->len;
 	}
 
+	/* Packets already queued? Keep ordering — append, don't overtake. */
+	if (vpn_q_head) {
+		if (vpn_q_push(s->fd, iov, i, total) == 0)
+			return ERR_OK;
+		LINK_STATS_INC(link.drop);
+		return ERR_OK;
+	}
+
 	ret = writev(s->fd, iov, i);
 	if (ret < 0) {
 		if (errno == ECONNREFUSED || errno == ENOTCONN)
 			vpn_conn_down();
-		else
+		else if (errno == EAGAIN || errno == EWOULDBLOCK || errno == ENOBUFS) {
+			/* socketpair full: queue + flush on writable (see vpn_q_push) */
+			if (vpn_q_push(s->fd, iov, i, total) != 0)
+				LINK_STATS_INC(link.drop);
+		} else
 			LINK_STATS_INC(link.drop);
 	} else if (ret != total)
 		LINK_STATS_INC(link.lenerr);
