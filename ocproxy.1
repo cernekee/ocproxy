@@ -66,6 +66,18 @@ unspecified, \fBocproxy\fP will bind to the loopback interface by default
 unless \fB\-\-allow\-remote\fP is used.
 
 .TP
+\fB\-U, \-\-unix\-socks\fP \fIpath\fP
+Listen for SOCKS5 connections on a local Unix-domain stream socket.
+Use a fresh path in a directory accessible only to the intended user.
+The socket is created with group and other permission bits masked; enforcement
+of socket permissions varies by operating system.
+The listener does not authenticate peers; applications may use platform-specific
+peer credential interfaces to identify them.
+Existing paths are preserved and cause startup to fail.
+The caller owns cleanup of the socket path after the process exits.
+This option can be used together with a TCP listener.
+
+.TP
 \fB\-L, \-\-localfw\fP \fIport:host:hostport\fP
 Bind to port local TCP port \fIport\fP, and forward incoming connections
 to \fIhost:hostport\fP on the VPN.  \fIhost\fP can be a DNS name or a

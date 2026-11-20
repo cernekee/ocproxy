@@ -93,6 +93,9 @@ Building from git:
     ./configure
     make
 
+Run the listener integration tests with `make check` (requires Python 3).
+The tests use local sockets and do not require a VPN.
+
 
 Other possible uses for ocproxy
 -------------------------------

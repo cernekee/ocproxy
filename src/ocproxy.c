@@ -39,6 +39,8 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/un.h>
 #include <sys/time.h>
 #include <sys/uio.h>
 
@@ -119,6 +121,7 @@ struct ocp_sock {
 	/* for all listeners */
 	int lport;
 	char *bind_addr;
+	const char *unix_path;
 	evconnlistener_cb listen_cb;
 
 	/* for port forwarding */
@@ -805,6 +808,25 @@ static void bind_all_listeners(void)
 	for (s = ocp_sock_bind_list; s; s = s->next) {
 		if (!s->listen_cb)
 			continue;
+		if (s->unix_path) {
+			struct sockaddr_un addr = {0};
+			size_t len = strlen(s->unix_path);
+			mode_t old_mask;
+
+			if (!len || len >= sizeof(addr.sun_path))
+				die("invalid Unix socket path length\n");
+			addr.sun_family = AF_UNIX;
+			memcpy(addr.sun_path, s->unix_path, len + 1);
+			/* Never remove an existing path. */
+			old_mask = umask(0077);
+			s->listener = evconnlistener_new_bind(event_base, s->listen_cb,
+				s, LEV_OPT_CLOSE_ON_FREE, -1,
+				(struct sockaddr *)&addr, sizeof(addr));
+			umask(old_mask);
+			if (!s->listener)
+				die("cannot bind Unix socket\n");
+			continue;
+		}
 		if (s->lport < 1 || s->lport > 65535)
 			die("invalid port number: %d\n", s->lport);
 
@@ -898,6 +920,7 @@ static struct option longopts[] = {
 	{ "mtu",		1,	NULL,	'M' },
 	{ "dns",		1,	NULL,	'd' },
 	{ "domain",		1,	NULL,	'o' },
+	{ "unix-socks",	1,	NULL,	'U' },
 	{ "localfw",		1,	NULL,	'L' },
 	{ "dynfw",		1,	NULL,	'D' },
 	{ "keepalive",		1,	NULL,	'k' },
@@ -949,7 +972,7 @@ int main(int argc, char **argv)
 
 	/* override with command line options */
 	while ((opt = getopt_long(argc, argv,
-				  "I:M:d:o:D:k:gL:vT", longopts, NULL)) != -1) {
+				  "I:M:d:o:D:U:k:gL:vT", longopts, NULL)) != -1) {
 		switch (opt) {
 		case 'I':
 			ip_str = optarg;
@@ -965,6 +988,11 @@ int main(int argc, char **argv)
 			break;
 		case 'D':
 			s = dyn_fwd(optarg);
+			break;
+		case 'U':
+			s = new_listener(0, new_conn_cb);
+			s->conn_type = CONN_TYPE_SOCKS;
+			s->unix_path = optarg;
 			break;
 		case 'k':
 			keep_intvl = ocp_atoi(optarg);

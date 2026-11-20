@@ -121,7 +121,8 @@ bin_PROGRAMS		+= vpnns
 dist_man_MANS		+= vpnns.1
 endif
 
-EXTRA_DIST		= .gitignore
+TESTS			= tests/listeners.py
+EXTRA_DIST		= .gitignore $(TESTS)
 DISTCLEANFILES		= *~
 
 LWIP_GIT		= git://git.savannah.nongnu.org/lwip.git
